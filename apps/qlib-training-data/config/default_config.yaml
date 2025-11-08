@@ -1,0 +1,50 @@
+# Default configuration for qlib training data generation
+
+provider:
+  uri: "~/.qlib/qlib_data/cn_data"
+  region: "cn"
+
+data:
+  instruments: "csi300"
+  # Uncomment and set custom date range
+  # start_time: "2020-01-01"
+  # end_time: "2023-12-31"
+  
+  # Fields to fetch from qlib
+  fields:
+    - "$open"
+    - "$high"
+    - "$low"
+    - "$close"
+    - "$volume"
+    - "$factor"
+    - "$change"
+    - "$vwap"
+
+features:
+  generate: true
+  
+  # Moving averages
+  moving_averages:
+    - 5
+    - 10
+    - 20
+  
+  # Momentum periods
+  momentum_periods:
+    - 5
+    - 10
+  
+  # Volatility windows
+  volatility_windows:
+    - 10
+    - 20
+
+output:
+  path: "training_data.csv"
+  format: "csv"  # Options: csv, parquet, pickle
+  labels_separate: false
+  labels_path: "labels.csv"
+
+logging:
+  level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR

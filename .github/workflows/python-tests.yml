@@ -1,0 +1,71 @@
+name: Python App Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'apps/qlib-training-data/**'
+      - '.github/workflows/python-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'apps/qlib-training-data/**'
+      - '.github/workflows/python-tests.yml'
+
+jobs:
+  test-qlib-training-data:
+    name: Test qlib-training-data app
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('apps/qlib-training-data/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      working-directory: apps/qlib-training-data
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run unit tests
+      working-directory: apps/qlib-training-data
+      run: |
+        python -m pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: apps/qlib-training-data/coverage.xml
+        flags: qlib-training-data
+        name: codecov-umbrella
+    
+    - name: Lint with flake8
+      working-directory: apps/qlib-training-data
+      run: |
+        pip install flake8
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+    
+    - name: Type checking with mypy
+      working-directory: apps/qlib-training-data
+      run: |
+        pip install mypy types-PyYAML
+        mypy src/ --ignore-missing-imports || true
