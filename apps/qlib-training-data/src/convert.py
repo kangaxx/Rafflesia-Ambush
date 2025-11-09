@@ -121,7 +121,7 @@ def bin_to_csv_merged(
 
             # 保存 CSV
             csv_path = os.path.join(csv_output_dir, f"{instrument}.csv")
-            merged_df.to_csv(csv_path)
+            merged_df.to_csv(csv_path, index_label="datetime")
             success_msg = f"[{idx}/{len(field_dirs)}] 已保存：{csv_path}"
             print(success_msg)
             report_content.append(success_msg)
