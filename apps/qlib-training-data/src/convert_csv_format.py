@@ -11,8 +11,8 @@ import sys
 import os
 from pathlib import Path
 
-# 必需的字段顺序
-REQUIRED_FIELDS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+# 必需的字段顺序（除datetime外，其他字段必须存在）
+REQUIRED_FIELDS = ['open', 'high', 'low', 'close', 'volume']
 
 
 def find_datetime_column(df):
@@ -201,8 +201,36 @@ def reorder_csv_fields(df):
     Returns:
         pandas.DataFrame: 重新排序后的DataFrame
     """
-    # 只保留必需的字段，并按照指定顺序排序
-    reordered_df = df[REQUIRED_FIELDS].copy()
+    # 智能查找日期时间列
+    datetime_col_name, datetime_col_data = find_datetime_column(df)
+    
+    # 构建最终的字段顺序
+    if datetime_col_name is not None:
+        # 如果找到日期时间列，将其重命名为datetime并作为第一个字段
+        final_fields = ['datetime'] + REQUIRED_FIELDS
+        
+        # 创建新的DataFrame，重命名日期时间列
+        reordered_df = df.copy()
+        reordered_df = reordered_df.rename(columns={datetime_col_name: 'datetime'})
+        
+        # 只保留必需的字段
+        reordered_df = reordered_df[final_fields].copy()
+        
+        print(f"已将字段 '{datetime_col_name}' 重命名为 'datetime'")
+        
+    else:
+        # 如果没有找到日期时间列，检查是否有datetime字段
+        if 'datetime' in df.columns:
+            final_fields = ['datetime'] + REQUIRED_FIELDS
+        else:
+            # 如果连datetime字段都没有，只保留其他必需字段
+            final_fields = REQUIRED_FIELDS
+        
+        # 确保所有字段都存在于DataFrame中
+        available_fields = [field for field in final_fields if field in df.columns]
+        
+        # 只保留存在的字段，并按照指定顺序排序
+        reordered_df = df[available_fields].copy()
     
     return reordered_df
 
@@ -239,12 +267,13 @@ def convert_csv_format(input_file, output_file=None):
     reordered_df.to_csv(output_file, index=False)
     
     # 统计信息
-    removed_fields = set(original_fields) - set(REQUIRED_FIELDS)
+    final_fields = list(reordered_df.columns)
+    removed_fields = set(original_fields) - set(final_fields)
     if removed_fields:
         print(f"已删除的字段: {', '.join(removed_fields)}")
     
     print(f"转换完成! 输出文件: {output_file}")
-    print(f"最终字段顺序: {', '.join(REQUIRED_FIELDS)}")
+    print(f"最终字段顺序: {', '.join(final_fields)}")
     
     return str(output_file)
 
