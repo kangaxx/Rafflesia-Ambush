@@ -15,12 +15,62 @@ from pathlib import Path
 REQUIRED_FIELDS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
 
 
-def validate_datetime_column(datetime_series):
+def find_datetime_column(df):
     """
-    验证datetime列是否包含有效的日期数据
+    在DataFrame中查找包含日期时间数据的列
     
     Args:
-        datetime_series (pandas.Series): datetime列数据
+        df (pandas.DataFrame): 输入的DataFrame
+        
+    Returns:
+        tuple: (列名, 列数据) 如果找到日期时间列，否则 (None, None)
+    """
+    # 首先检查是否有名为datetime的列
+    if 'datetime' in df.columns:
+        return 'datetime', df['datetime']
+    
+    # 检查其他可能包含日期时间的列名
+    datetime_keywords = ['date', 'time', 'timestamp', 'datetime', '交易时间', '时间', '日期']
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        for keyword in datetime_keywords:
+            if keyword in col_lower:
+                return col, df[col]
+    
+    # 如果没有找到明显的日期时间列名，尝试自动识别
+    for col in df.columns:
+        # 跳过数值列
+        if pd.api.types.is_numeric_dtype(df[col]):
+            continue
+            
+        # 尝试将列数据转换为日期时间
+        try:
+            sample_data = df[col].dropna().head(10)
+            if len(sample_data) == 0:
+                continue
+                
+            # 尝试解析为日期时间
+            parsed_dates = pd.to_datetime(sample_data, errors='coerce')
+            valid_count = parsed_dates.notnull().sum()
+            
+            # 如果大部分样本都能成功解析为日期时间，则认为这是日期时间列
+            if valid_count / len(sample_data) > 0.7:
+                return col, df[col]
+                
+        except Exception:
+            continue
+    
+    return None, None
+
+
+def validate_datetime_column(datetime_series, column_name):
+    """
+    验证列是否包含有效的日期数据
+    
+    Args:
+        datetime_series (pandas.Series): 日期时间列数据
+        column_name (str): 列名
         
     Returns:
         dict: 包含验证结果和错误信息的字典
@@ -29,7 +79,7 @@ def validate_datetime_column(datetime_series):
     if datetime_series.isnull().any():
         return {
             'is_valid': False,
-            'error_message': 'datetime列包含空值'
+            'error_message': f'{column_name}列包含空值'
         }
     
     # 尝试将数据转换为datetime类型
@@ -43,7 +93,7 @@ def validate_datetime_column(datetime_series):
             invalid_samples = datetime_series[datetime_values.isnull()].head(3).tolist()
             return {
                 'is_valid': False,
-                'error_message': f'发现{invalid_count}个无效的日期格式，示例: {invalid_samples}'
+                'error_message': f'{column_name}列发现{invalid_count}个无效的日期格式，示例: {invalid_samples}'
             }
         
         # 检查日期范围是否合理（假设数据是近几十年的）
@@ -55,31 +105,31 @@ def validate_datetime_column(datetime_series):
         if min_date.year > current_year:
             return {
                 'is_valid': False,
-                'error_message': f'日期数据异常：最早日期{min_date}晚于当前年份'
+                'error_message': f'{column_name}列日期数据异常：最早日期{min_date}晚于当前年份'
             }
         
         if max_date.year < 1900:
             return {
                 'is_valid': False,
-                'error_message': f'日期数据异常：最晚日期{max_date}早于1900年'
+                'error_message': f'{column_name}列日期数据异常：最晚日期{max_date}早于1900年'
             }
         
         # 检查日期是否按时间顺序排列（可选，但金融数据通常应该有序）
         if not datetime_values.is_monotonic_increasing:
             return {
                 'is_valid': True,
-                'warning_message': '日期数据未按时间顺序排列（金融数据通常应该有序）'
+                'warning_message': f'{column_name}列日期数据未按时间顺序排列（金融数据通常应该有序）'
             }
         
         return {
             'is_valid': True,
-            'message': f'日期数据有效，范围: {min_date} 到 {max_date}'
+            'message': f'{column_name}列日期数据有效，范围: {min_date} 到 {max_date}'
         }
         
     except Exception as e:
         return {
             'is_valid': False,
-            'error_message': f'日期解析错误: {str(e)}'
+            'error_message': f'{column_name}列日期解析错误: {str(e)}'
         }
 
 
@@ -120,17 +170,23 @@ def validate_csv_file(input_file):
         if df[field].isnull().any():
             raise ValueError(f"字段 '{field}' 包含缺失值")
     
-    # 特别检查datetime字段的内容是否为有效日期
-    if 'datetime' in df.columns:
-        datetime_validation_result = validate_datetime_column(df['datetime'])
+    # 智能查找并验证日期时间列
+    datetime_col_name, datetime_col_data = find_datetime_column(df)
+    
+    if datetime_col_name is not None:
+        print(f"找到日期时间列: {datetime_col_name}")
+        
+        datetime_validation_result = validate_datetime_column(datetime_col_data, datetime_col_name)
         if not datetime_validation_result['is_valid']:
-            raise ValueError(f"datetime字段内容无效: {datetime_validation_result['error_message']}")
+            raise ValueError(f"日期时间列内容无效: {datetime_validation_result['error_message']}")
         
         # 显示datetime验证信息
         if 'message' in datetime_validation_result:
             print(f"✓ {datetime_validation_result['message']}")
         elif 'warning_message' in datetime_validation_result:
             print(f"⚠ {datetime_validation_result['warning_message']}")
+    else:
+        print("⚠ 未找到明显的日期时间列，将使用原始字段名")
     
     return df
 
