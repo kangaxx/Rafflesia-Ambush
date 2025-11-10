@@ -15,6 +15,74 @@ from pathlib import Path
 REQUIRED_FIELDS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
 
 
+def validate_datetime_column(datetime_series):
+    """
+    验证datetime列是否包含有效的日期数据
+    
+    Args:
+        datetime_series (pandas.Series): datetime列数据
+        
+    Returns:
+        dict: 包含验证结果和错误信息的字典
+    """
+    # 检查是否为空
+    if datetime_series.isnull().any():
+        return {
+            'is_valid': False,
+            'error_message': 'datetime列包含空值'
+        }
+    
+    # 尝试将数据转换为datetime类型
+    try:
+        # 尝试多种常见的日期格式
+        datetime_values = pd.to_datetime(datetime_series, errors='coerce')
+        
+        # 检查是否有无法转换的值
+        invalid_count = datetime_values.isnull().sum()
+        if invalid_count > 0:
+            invalid_samples = datetime_series[datetime_values.isnull()].head(3).tolist()
+            return {
+                'is_valid': False,
+                'error_message': f'发现{invalid_count}个无效的日期格式，示例: {invalid_samples}'
+            }
+        
+        # 检查日期范围是否合理（假设数据是近几十年的）
+        min_date = datetime_values.min()
+        max_date = datetime_values.max()
+        
+        # 如果最早日期晚于当前日期，或者最晚日期早于1900年，可能有问题
+        current_year = pd.Timestamp.now().year
+        if min_date.year > current_year:
+            return {
+                'is_valid': False,
+                'error_message': f'日期数据异常：最早日期{min_date}晚于当前年份'
+            }
+        
+        if max_date.year < 1900:
+            return {
+                'is_valid': False,
+                'error_message': f'日期数据异常：最晚日期{max_date}早于1900年'
+            }
+        
+        # 检查日期是否按时间顺序排列（可选，但金融数据通常应该有序）
+        if not datetime_values.is_monotonic_increasing:
+            return {
+                'is_valid': True,
+                'warning_message': '日期数据未按时间顺序排列（金融数据通常应该有序）'
+            }
+        
+        return {
+            'is_valid': True,
+            'message': f'日期数据有效，范围: {min_date} 到 {max_date}'
+        }
+        
+    except Exception as e:
+        return {
+            'is_valid': False,
+            'error_message': f'日期解析错误: {str(e)}'
+        }
+
+
 def validate_csv_file(input_file):
     """
     验证CSV文件是否包含所有必需的字段
@@ -26,7 +94,7 @@ def validate_csv_file(input_file):
         pandas.DataFrame: 读取的DataFrame
         
     Raises:
-        ValueError: 如果缺少必需字段
+        ValueError: 如果缺少必需字段或字段内容无效
         FileNotFoundError: 如果文件不存在
     """
     if not os.path.exists(input_file):
@@ -51,6 +119,18 @@ def validate_csv_file(input_file):
     for field in REQUIRED_FIELDS:
         if df[field].isnull().any():
             raise ValueError(f"字段 '{field}' 包含缺失值")
+    
+    # 特别检查datetime字段的内容是否为有效日期
+    if 'datetime' in df.columns:
+        datetime_validation_result = validate_datetime_column(df['datetime'])
+        if not datetime_validation_result['is_valid']:
+            raise ValueError(f"datetime字段内容无效: {datetime_validation_result['error_message']}")
+        
+        # 显示datetime验证信息
+        if 'message' in datetime_validation_result:
+            print(f"✓ {datetime_validation_result['message']}")
+        elif 'warning_message' in datetime_validation_result:
+            print(f"⚠ {datetime_validation_result['warning_message']}")
     
     return df
 
@@ -116,22 +196,14 @@ def convert_csv_format(input_file, output_file=None):
 def main():
     """主函数，处理命令行参数"""
     parser = argparse.ArgumentParser(
-        description='CSV格式转换工具',
-        epilog='''
-使用范例:
-  # 基本用法：转换data.csv文件，自动生成data_converted.csv
-  python convert_csv_format.py data.csv
-  
-  # 指定输出文件：转换data.csv并保存为result.csv
-  python convert_csv_format.py data.csv -o result.csv
-  
-  # 转换包含金融数据的CSV文件
-  python convert_csv_format.py stock_data.csv -o formatted_stock_data.csv
-  
-字段要求:
-  输入CSV文件必须包含以下字段：datetime, open, high, low, close, volume
-  其他字段将被自动删除，字段顺序将按照上述顺序重新排列
-        '''
+        description='CSV格式转换工具 - 将CSV文件字段重新排序为datetime,open,high,low,close,volume',
+        epilog='''使用范例:
+  python convert_csv_format.py data.csv                    # 基本用法
+  python convert_csv_format.py data.csv -o result.csv      # 指定输出文件
+  python convert_csv_format.py stock_data.csv              # 金融数据转换
+
+字段要求: 输入CSV必须包含datetime,open,high,low,close,volume字段
+其他字段将被删除，顺序按上述排列'''
     )
     parser.add_argument('input_file', help='输入CSV文件路径')
     parser.add_argument('-o', '--output', help='输出CSV文件路径（可选）')
