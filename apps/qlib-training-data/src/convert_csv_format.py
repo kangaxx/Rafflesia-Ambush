@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 CSV格式转换工具
-将CSV文件的数据字段按照指定顺序重新排序：datetime,open,high,low,close,volume
+将CSV文件的数据字段按照指定顺序重新排序：datetime,open,high,low,close,vol,amt
+输入CSV必须包含open,high,low,close,volume,money字段
+输出时会将volume重命名为vol，money重命名为amt
 不在指定字段内的数据将被删除，如果发现指定字段数据有缺失则报错
 """
 
@@ -12,7 +14,7 @@ import os
 from pathlib import Path
 
 # 必需的字段顺序（除datetime外，其他字段必须存在）
-REQUIRED_FIELDS = ['open', 'high', 'low', 'close', 'volume']
+REQUIRED_FIELDS = ['open', 'high', 'low', 'close', 'volume', 'money']
 
 
 def find_datetime_column(df):
@@ -216,6 +218,9 @@ def reorder_csv_fields(df):
         # 只保留必需的字段
         reordered_df = reordered_df[final_fields].copy()
         
+        # 重命名字段：volume -> vol, money -> amt
+        reordered_df = reordered_df.rename(columns={'volume': 'vol', 'money': 'amt'})
+        
         print(f"已将字段 '{datetime_col_name}' 重命名为 'datetime'")
         
     else:
@@ -231,6 +236,12 @@ def reorder_csv_fields(df):
         
         # 只保留存在的字段，并按照指定顺序排序
         reordered_df = df[available_fields].copy()
+        
+        # 重命名字段：volume -> vol, money -> amt
+        if 'volume' in reordered_df.columns:
+            reordered_df = reordered_df.rename(columns={'volume': 'vol'})
+        if 'money' in reordered_df.columns:
+            reordered_df = reordered_df.rename(columns={'money': 'amt'})
     
     return reordered_df
 
@@ -291,8 +302,9 @@ def main():
   python convert_csv_format.py data.csv -o result.csv      # 指定输出文件
   python convert_csv_format.py stock_data.csv              # 金融数据转换
 
-字段要求: 输入CSV必须包含datetime,open,high,low,close,volume字段
-其他字段将被删除，顺序按上述排列'''
+字段要求: 输入CSV必须包含open,high,low,close,volume,money字段
+输出CSV将重命名字段：volume->vol, money->amt
+其他字段将被删除，顺序按指定排列'''
     )
     parser.add_argument('input_file', help='输入CSV文件路径')
     parser.add_argument('-o', '--output', help='输出CSV文件路径（可选）')
