@@ -263,6 +263,10 @@ def convert_csv_format(input_file, output_file=None):
         input_path = Path(input_file)
         output_file = input_path.parent / f"{input_path.stem}_converted{input_path.suffix}"
     
+    # 确保输出目录存在
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
     # 保存重新排序后的CSV文件
     reordered_df.to_csv(output_file, index=False)
     
