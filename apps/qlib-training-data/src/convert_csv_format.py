@@ -115,7 +115,24 @@ def convert_csv_format(input_file, output_file=None):
 
 def main():
     """主函数，处理命令行参数"""
-    parser = argparse.ArgumentParser(description='CSV格式转换工具')
+    parser = argparse.ArgumentParser(
+        description='CSV格式转换工具',
+        epilog='''
+使用范例:
+  # 基本用法：转换data.csv文件，自动生成data_converted.csv
+  python convert_csv_format.py data.csv
+  
+  # 指定输出文件：转换data.csv并保存为result.csv
+  python convert_csv_format.py data.csv -o result.csv
+  
+  # 转换包含金融数据的CSV文件
+  python convert_csv_format.py stock_data.csv -o formatted_stock_data.csv
+  
+字段要求:
+  输入CSV文件必须包含以下字段：datetime, open, high, low, close, volume
+  其他字段将被自动删除，字段顺序将按照上述顺序重新排列
+        '''
+    )
     parser.add_argument('input_file', help='输入CSV文件路径')
     parser.add_argument('-o', '--output', help='输出CSV文件路径（可选）')
     
