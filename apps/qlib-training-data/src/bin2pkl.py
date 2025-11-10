@@ -25,51 +25,108 @@ def load_config(config_file_path):
         # 提取参数
         config_params = {}
         
-        # 获取 self.dataset_path (对应 output_dir)
-        if hasattr(config_module, 'dataset_path'):
-            config_params['output_dir'] = config_module.dataset_path
-        elif hasattr(config_module, 'self') and hasattr(config_module.self, 'dataset_path'):
-            config_params['output_dir'] = config_module.self.dataset_path
+        # 查找配置类实例
+        config_instance = None
         
-        # 获取时间范围参数
-        # train_end 从 self.train_time_range 提取结束时间
-        if hasattr(config_module, 'train_time_range'):
-            train_range = config_module.train_time_range
-            if isinstance(train_range, (list, tuple)) and len(train_range) >= 2:
-                config_params['train_end'] = train_range[1]
-        elif hasattr(config_module, 'self') and hasattr(config_module.self, 'train_time_range'):
-            train_range = config_module.self.train_time_range
-            if isinstance(train_range, (list, tuple)) and len(train_range) >= 2:
-                config_params['train_end'] = train_range[1]
+        # 查找可能的配置类实例名称
+        possible_config_names = ['config', 'cfg', 'conf', 'settings']
         
-        # val_end 从 self.val_time_range 提取结束时间
-        if hasattr(config_module, 'val_time_range'):
-            val_range = config_module.val_time_range
-            if isinstance(val_range, (list, tuple)) and len(val_range) >= 2:
-                config_params['val_end'] = val_range[1]
-        elif hasattr(config_module, 'self') and hasattr(config_module.self, 'val_time_range'):
-            val_range = config_module.self.val_time_range
-            if isinstance(val_range, (list, tuple)) and len(val_range) >= 2:
-                config_params['val_end'] = val_range[1]
+        for attr_name in dir(config_module):
+            if not attr_name.startswith('_'):
+                attr_value = getattr(config_module, attr_name)
+                # 检查是否是类实例且类名包含config
+                if hasattr(attr_value, '__class__') and 'config' in attr_value.__class__.__name__.lower():
+                    config_instance = attr_value
+                    print(f"🔍 找到配置类实例: {attr_name} (类型: {attr_value.__class__.__name__})")
+                    break
         
-        # test_end 从 self.test_time_range 提取结束时间
-        if hasattr(config_module, 'test_time_range'):
-            test_range = config_module.test_time_range
-            if isinstance(test_range, (list, tuple)) and len(test_range) >= 2:
-                config_params['test_end'] = test_range[1]
-        elif hasattr(config_module, 'self') and hasattr(config_module.self, 'test_time_range'):
-            test_range = config_module.self.test_time_range
-            if isinstance(test_range, (list, tuple)) and len(test_range) >= 2:
-                config_params['test_end'] = test_range[1]
+        # 如果没有找到明确的配置类实例，尝试查找Config类
+        if config_instance is None:
+            for attr_name in dir(config_module):
+                if not attr_name.startswith('_') and 'config' in attr_name.lower():
+                    attr_value = getattr(config_module, attr_name)
+                    if hasattr(attr_value, '__class__') and hasattr(attr_value, 'dataset_path'):
+                        config_instance = attr_value
+                        print(f"🔍 找到配置类实例: {attr_name}")
+                        break
         
-        print(f"从配置文件 {config_file_path} 加载参数:")
-        for key, value in config_params.items():
-            print(f"  {key}: {value}")
+        # 如果找到了配置类实例，从实例中提取参数
+        if config_instance:
+            print(f"📋 从配置类实例中提取参数...")
+            
+            # 获取 dataset_path (对应 output_dir)
+            if hasattr(config_instance, 'dataset_path'):
+                config_params['output_dir'] = config_instance.dataset_path
+                print(f"   ✅ 找到 dataset_path: {config_instance.dataset_path}")
+            
+            # 获取时间范围参数
+            # train_end 从 train_time_range 提取结束时间
+            if hasattr(config_instance, 'train_time_range'):
+                train_range = config_instance.train_time_range
+                if isinstance(train_range, (list, tuple)) and len(train_range) >= 2:
+                    config_params['train_end'] = train_range[1]
+                    print(f"   ✅ 找到 train_time_range: {train_range} → train_end: {train_range[1]}")
+            
+            # val_end 从 val_time_range 提取结束时间
+            if hasattr(config_instance, 'val_time_range'):
+                val_range = config_instance.val_time_range
+                if isinstance(val_range, (list, tuple)) and len(val_range) >= 2:
+                    config_params['val_end'] = val_range[1]
+                    print(f"   ✅ 找到 val_time_range: {val_range} → val_end: {val_range[1]}")
+            
+            # test_end 从 test_time_range 提取结束时间
+            if hasattr(config_instance, 'test_time_range'):
+                test_range = config_instance.test_time_range
+                if isinstance(test_range, (list, tuple)) and len(test_range) >= 2:
+                    config_params['test_end'] = test_range[1]
+                    print(f"   ✅ 找到 test_time_range: {test_range} → test_end: {test_range[1]}")
+        else:
+            # 如果没有找到配置类实例，尝试从模块级别变量中提取
+            print("🔍 未找到配置类实例，尝试从模块变量中提取...")
+            
+            # 获取 dataset_path (对应 output_dir)
+            if hasattr(config_module, 'dataset_path'):
+                config_params['output_dir'] = config_module.dataset_path
+                print(f"   ✅ 找到 dataset_path: {config_module.dataset_path}")
+            
+            # 获取时间范围参数
+            if hasattr(config_module, 'train_time_range'):
+                train_range = config_module.train_time_range
+                if isinstance(train_range, (list, tuple)) and len(train_range) >= 2:
+                    config_params['train_end'] = train_range[1]
+                    print(f"   ✅ 找到 train_time_range: {train_range} → train_end: {train_range[1]}")
+            
+            if hasattr(config_module, 'val_time_range'):
+                val_range = config_module.val_time_range
+                if isinstance(val_range, (list, tuple)) and len(val_range) >= 2:
+                    config_params['val_end'] = val_range[1]
+                    print(f"   ✅ 找到 val_time_range: {val_range} → val_end: {val_range[1]}")
+            
+            if hasattr(config_module, 'test_time_range'):
+                test_range = config_module.test_time_range
+                if isinstance(test_range, (list, tuple)) and len(test_range) >= 2:
+                    config_params['test_end'] = test_range[1]
+                    print(f"   ✅ 找到 test_time_range: {test_range} → test_end: {test_range[1]}")
+        
+        # 检查是否成功提取到任何参数
+        if not config_params:
+            print("⚠️  警告: 未从配置文件中提取到任何参数")
+            # 打印可用的属性以供调试
+            print("🔍 配置文件中的可用属性:")
+            for attr_name in dir(config_module):
+                if not attr_name.startswith('_'):
+                    attr_value = getattr(config_module, attr_name)
+                    if not callable(attr_value):  # 只显示非函数属性
+                        print(f"   {attr_name}: {type(attr_value).__name__} = {attr_value}")
+        else:
+            print(f"\n✅ 从配置文件 {config_file_path} 成功加载 {len(config_params)} 个参数")
         
         return config_params
         
     except Exception as e:
-        print(f"加载配置文件 {config_file_path} 失败: {e}")
+        print(f"❌ 加载配置文件 {config_file_path} 失败: {e}")
+        import traceback
+        print(f"详细错误信息: {traceback.format_exc()}")
         return {}
 
 
