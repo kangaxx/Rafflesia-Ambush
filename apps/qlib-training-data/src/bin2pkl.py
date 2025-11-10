@@ -130,6 +130,39 @@ def load_config(config_file_path):
         return {}
 
 
+def parse_datetime_with_flexible_format(datetime_str: str) -> datetime:
+    """
+    灵活解析日期时间字符串，支持多种格式
+    
+    Args:
+        datetime_str (str): 日期时间字符串
+        
+    Returns:
+        datetime: 解析后的日期时间对象
+    """
+    # 定义常见的时间格式
+    datetime_formats = [
+        "%Y-%m-%d %H:%M:%S",  # 2024-01-01 09:30:00
+        "%Y-%m-%d %H:%M",     # 2024-01-01 09:30
+        "%Y-%m-%d",           # 2024-01-01
+        "%Y/%m/%d %H:%M:%S",  # 2024/01/01 09:30:00
+        "%Y/%m/%d %H:%M",     # 2024/01/01 09:30
+        "%Y/%m/%d",           # 2024/01/01
+        "%Y%m%d %H%M%S",      # 20240101 093000
+        "%Y%m%d %H%M",        # 20240101 0930
+        "%Y%m%d",             # 20240101
+    ]
+    
+    for fmt in datetime_formats:
+        try:
+            return datetime.strptime(datetime_str, fmt)
+        except ValueError:
+            continue
+    
+    # 如果所有格式都失败，抛出详细错误
+    raise ValueError(f"无法解析时间格式: {datetime_str}，支持的格式包括: YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, 等")
+
+
 def split_csv_to_pkl(
     csv_dir: str,
     output_dir: str,
@@ -142,15 +175,16 @@ def split_csv_to_pkl(
     """
     将 CSV 目录下的文件按时间分割为 train/val/test .pkl
     默认仅处理第一个 CSV 文件，可通过 process_all=True 处理所有
+    支持分钟级K线数据（包含时分秒的时间格式）
     """
-    # 校验日期格式
+    # 校验日期格式（支持多种时间格式）
     try:
-        train_end_dt = datetime.strptime(train_end, "%Y-%m-%d")
-        val_end_dt = datetime.strptime(val_end, "%Y-%m-%d")
+        train_end_dt = parse_datetime_with_flexible_format(train_end)
+        val_end_dt = parse_datetime_with_flexible_format(val_end)
         
         # 如果提供了 test_end，则使用它，否则使用 val_end 之后的所有数据
         if test_end:
-            test_end_dt = datetime.strptime(test_end, "%Y-%m-%d")
+            test_end_dt = parse_datetime_with_flexible_format(test_end)
             if val_end_dt >= test_end_dt:
                 raise ValueError("val_end 必须早于 test_end")
         else:
@@ -158,8 +192,18 @@ def split_csv_to_pkl(
             
         if train_end_dt >= val_end_dt:
             raise ValueError("train_end 必须早于 val_end")
+        
+        # 打印解析后的时间信息
+        print(f"📅 时间参数解析结果:")
+        print(f"   训练集结束: {train_end_dt}")
+        print(f"   验证集结束: {val_end_dt}")
+        if test_end_dt:
+            print(f"   测试集结束: {test_end_dt}")
+        else:
+            print(f"   测试集结束: 自动使用 {val_end_dt} 之后的所有数据")
+            
     except ValueError as e:
-        raise ValueError(f"日期格式错误（需为 YYYY-MM-DD）：{e}")
+        raise ValueError(f"日期格式错误：{e}")
 
     # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
@@ -192,15 +236,27 @@ def split_csv_to_pkl(
         instrument = os.path.splitext(csv_file)[0]  # 股票代码（文件名）
 
         try:
-            # 读取 CSV（根据是否有日期表头处理索引）
+            # 读取 CSV（支持分钟级K线数据，包含时分秒）
             if date_col:
-                df = pd.read_csv(csv_path, parse_dates=[date_col], index_col=date_col)
+                # 使用 infer_datetime_format=True 自动推断日期时间格式
+                df = pd.read_csv(csv_path, parse_dates=[date_col], index_col=date_col, infer_datetime_format=True)
             else:
-                df = pd.read_csv(csv_path, parse_dates=True, index_col=0)
+                # 如果没有指定日期列，尝试自动推断
+                df = pd.read_csv(csv_path, parse_dates=True, index_col=0, infer_datetime_format=True)
 
             # 确保索引是 datetime 类型
             if not pd.api.types.is_datetime64_any_dtype(df.index):
-                raise TypeError(f"{instrument} 的索引不是时间类型，请检查 CSV 格式")
+                # 如果自动推断失败，尝试手动转换
+                try:
+                    df.index = pd.to_datetime(df.index, infer_datetime_format=True)
+                    if not pd.api.types.is_datetime64_any_dtype(df.index):
+                        raise TypeError(f"{instrument} 的索引无法转换为时间类型")
+                except Exception as e:
+                    raise TypeError(f"{instrument} 的索引不是时间类型，请检查 CSV 格式。错误: {e}")
+            
+            # 打印时间范围信息（对于分钟级数据很有用）
+            print(f"   📊 数据时间范围: {df.index.min()} 到 {df.index.max()}")
+            print(f"   📈 数据总行数: {len(df)}")
 
             # 按时间分割数据
             train_df = df[df.index <= train_end_dt]
@@ -262,17 +318,17 @@ def split_csv_to_pkl(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="CSV 按时间分割为 train/val/test .pkl（默认处理第一个文件）")
+    parser = argparse.ArgumentParser(description="CSV 按时间分割为 train/val/test .pkl（支持分钟级K线数据，默认处理第一个文件）")
     parser.add_argument("--csv-dir", type=str, required=True,
                         help="CSV 文件所在目录（如 ./qlib_merged_csv）")
     parser.add_argument("--output-dir", type=str, default="./split_pkl",
                         help="输出 train/val/test .pkl 的目录")
     parser.add_argument("--train-end", type=str, required=True,
-                        help="训练集结束日期（如 2018-12-31）")
+                        help="训练集结束时间（支持多种格式：YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, YYYY/MM/DD HH:MM, 等）")
     parser.add_argument("--val-end", type=str, required=True,
-                        help="验证集结束日期（如 2020-12-31）")
+                        help="验证集结束时间（支持多种格式：YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, YYYY/MM/DD HH:MM, 等）")
     parser.add_argument("--test-end", type=str, default=None,
-                        help="测试集结束日期（如 2022-12-31），可选")
+                        help="测试集结束时间（支持多种格式：YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, YYYY/MM/DD HH:MM, 等），可选")
     parser.add_argument("--date-col", type=str, default="date",
                         help="CSV 中时间列的表头（若未指定表头则设为 ''）")
     parser.add_argument("--process-all", action="store_true",
