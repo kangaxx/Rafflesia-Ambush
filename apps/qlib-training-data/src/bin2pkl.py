@@ -321,7 +321,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="CSV 按时间分割为 train/val/test .pkl（支持分钟级K线数据，默认处理第一个文件）",
         epilog="""使用范例:
-  python bin2pkl.py --csv-dir ~/Rafflesia-Ambush/apps/qlib-training-data/src/csv_file/ --train-end "2022-12-31" --val-end "2024-06-30" --test-end "2025-06-05" --output-dir /root/Kronos/finetune/data/processed_datasets --date-col datetime
+  python bin2pkl.py --csv-dir ~/Rafflesia-Ambush/apps/qlib-training-data/src/csv_file/ --train-end "2022-12-31" --val-end "2024-06-30" --test-end "2025-01-01" --output-dir /root/Kronos/finetune/data/processed_datasets --date-col datetime
 
   python bin2pkl.py --csv-dir ./minute_data --train-end "2022-12-31 15:00:00" --val-end "2023-06-30 15:00:00" --test-end "2023-12-31 15:00:00" --process-all
 
