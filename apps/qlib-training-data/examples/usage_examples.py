@@ -247,6 +247,31 @@ def example_custom_features():
         print("✗ Failed to generate features")
 
 
+def example_vnpy_data_download():
+    """
+    Example 6: Using VNPY data download tool.
+    
+    This example demonstrates how to use the vnpy_data_download.py script
+    to download historical market data from various exchanges.
+    """
+    print("\n=== Example 6: VNPY Data Download ===")
+    print("This example shows command-line usage of vnpy_data_download.py")
+    print("\n1. Download daily BTC data from Binance:")
+    print("   python src/vnpy_data_download.py --symbol BTCUSDT --interval d --start 2023-01-01 --end 2023-01-10 --exchange BINANCE")
+    print("\n2. Download hourly data for multiple symbols:")
+    print("   python src/vnpy_data_download.py --symbol BTCUSDT,ETHUSDT --interval h1 --start 2023-01-01 --end 2023-01-02 --output ./downloads")
+    print("\n3. Download minute data and save as Parquet:")
+    print("   python src/vnpy_data_download.py --symbol BTCUSDT --interval 1m --start 2023-01-01 --end 2023-01-01 --format parquet")
+    print("\n4. Download Shanghai Silver (沪银) futures data:")
+    print("   python src/vnpy_data_download.py --symbol AG --interval d --start 2023-01-01 --end 2023-12-31 --exchange SHFE --output ./shfe_data")
+    print("   # For specific contract month:")
+    print("   python src/vnpy_data_download.py --symbol AG2312 --interval d --start 2023-01-01 --end 2023-12-31 --exchange SHFE")
+    print("\nNote: Before running these commands, you need to install vnpy:")
+    print("      pip install vnpy>=3.1.0")
+    print("\nMake sure you have proper API access configured for the exchanges you want to use.")
+    print("For Chinese futures markets (SHFE), you may need specific datafeed configuration.")
+
+
 def main():
     """
     Run all examples.
@@ -261,20 +286,23 @@ def main():
         print("\n⚠ WARNING: Qlib data not found at", data_path)
         print("Please download data first:")
         print("python -m qlib.run.get_data qlib_data --target_dir ~/.qlib/qlib_data/cn_data --region cn")
-        print("\nExamples will be skipped.")
-        return
+        print("\nQLib examples will be skipped.")
     
     try:
-        # Run examples
-        example_basic_usage()
-        example_custom_date_range()
-        example_raw_data_only()
-        example_custom_features()
-        example_save_data()
+        # Run Qlib examples if data is available
+        if os.path.exists(data_path):
+            example_basic_usage()
+            example_custom_date_range()
+            example_raw_data_only()
+            example_custom_features()
+            example_save_data()
+        
+        # Always show VNPY example (doesn't require Qlib data)
+        example_vnpy_data_download()
         
     except ImportError as e:
         print(f"\n✗ Import error: {e}")
-        print("Make sure qlib is installed: pip install pyqlib")
+        print("Make sure required packages are installed.")
     except Exception as e:
         print(f"\n✗ Error running examples: {e}")
     
