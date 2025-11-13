@@ -6,7 +6,7 @@ manager = DataManager(datafeed_name="CTP")
 
 # 下载螺纹钢主力合约数据
 manager.download_bar_data(
-    symbol="RB99",
+    symbol="RB",
     exchange=Exchange.SHFE,
     interval=Interval.DAY,
     start="2013-01-01",
