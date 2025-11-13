@@ -39,7 +39,16 @@ def setup_argparse() -> argparse.ArgumentParser:
         argparse.ArgumentParser: Configured argument parser
     """
     parser = argparse.ArgumentParser(
-        description="Download futures data using qlib with customizable parameters"
+        description="Qlib Futures Data Downloader\n"
+        "====================================\n"
+        "This script provides a comprehensive tool for downloading futures data using Qlib.\n"
+        "It supports customizable parameters for data storage, frequency, contract selection,\n"
+        "date ranges, and includes advanced features like download resumption.\n"
+        "\n"
+        "Example usage:\n"
+        "  python qlib_download_future_data.py --contracts CU,AL,ZN\n"
+        "  python qlib_download_future_data.py --contracts IF,IC --freq 5min --start-date 2023-01-01\n"
+        "  python qlib_download_future_data.py --contracts RU,BU --resume --chunk-size 15"
     )
     
     # Data storage configuration
@@ -47,7 +56,7 @@ def setup_argparse() -> argparse.ArgumentParser:
         '--output-path',
         type=str,
         default='~/.qlib/qlib_data/cn_future',
-        help='Path to save the downloaded futures data (default: ~/.qlib/qlib_data/cn_future)'
+        help='Path to save the downloaded futures data. Supports tilde (~) for home directory.'
     )
     
     # Contract specifications
@@ -55,7 +64,9 @@ def setup_argparse() -> argparse.ArgumentParser:
         '--contracts',
         type=str,
         required=True,
-        help='Future contracts to download, separated by commas (e.g., "CU,AL,ZN")'
+        help='Future contracts to download, separated by commas (e.g., "CU,AL,ZN").\n'
+        'The script will automatically find all valid contracts for each code.\n'
+        'For example, specifying "CU" will download all copper futures contracts.'
     )
     
     # Data frequency
@@ -64,20 +75,26 @@ def setup_argparse() -> argparse.ArgumentParser:
         type=str,
         default='1d',
         choices=['1min', '5min', '15min', '30min', '60min', '1d'],
-        help='Data frequency (default: 1d)'
+        help='Data frequency for the downloaded futures data.\n'
+        'Supports: 1min, 5min, 15min, 30min, 60min (hourly), or 1d (daily).\n'
+        'Intraday frequencies provide more granular data but may result in larger file sizes.'
     )
     
     # Date range
     parser.add_argument(
         '--start-date',
         type=str,
-        help='Start date in YYYY-MM-DD format'
+        help='Start date for data download in YYYY-MM-DD format.\n'
+        'If not specified, the earliest available data will be downloaded.\n'
+        'Example: --start-date 2022-01-01'
     )
     
     parser.add_argument(
         '--end-date',
         type=str,
-        help='End date in YYYY-MM-DD format'
+        help='End date for data download in YYYY-MM-DD format.\n'
+        'If not specified, the latest available data will be downloaded.\n'
+        'Example: --end-date 2023-12-31'
     )
     
     # Data fields
@@ -85,7 +102,9 @@ def setup_argparse() -> argparse.ArgumentParser:
         '--fields',
         type=str,
         default='open,high,low,close,volume,amount',
-        help='Data fields to download, separated by commas (default: open,high,low,close,volume,amount)'
+        help='Data fields to download, separated by commas.\n'
+        'Common fields include: open, high, low, close, volume, amount.\n'
+        'You can specify a subset of fields to reduce file size if needed.'
     )
     
     # Region
@@ -94,21 +113,24 @@ def setup_argparse() -> argparse.ArgumentParser:
         type=str,
         default='cn',
         choices=['cn', 'us'],
-        help='Data region (default: cn)'
+        help='Data region to download from. Default is China (cn).\n'
+        'Note: Contract availability depends on the selected region.'
     )
     
     # Logging level
     parser.add_argument(
         '--verbose',
         action='store_true',
-        help='Enable verbose logging'
+        help='Enable verbose logging for more detailed output during download.'
     )
     
     # Resume download
     parser.add_argument(
         '--resume',
         action='store_true',
-        help='Resume download from previous checkpoint if available'
+        help='Resume download from previous checkpoint if available.\n'
+        'This feature is useful for large downloads that might get interrupted.\n'
+        'The script will check for existing data files and continue from the latest date.'
     )
     
     # Download chunk size (days)
@@ -116,7 +138,9 @@ def setup_argparse() -> argparse.ArgumentParser:
         '--chunk-size',
         type=int,
         default=30,
-        help='Number of days to download in each chunk (default: 30)'
+        help='Number of days to download in each chunk (default: 30).\n'
+        'Smaller chunk sizes are useful for unstable connections or large date ranges.\n'
+        'Larger chunk sizes may be more efficient for stable connections.'
     )
     
     return parser
@@ -124,14 +148,22 @@ def setup_argparse() -> argparse.ArgumentParser:
 
 def initialize_qlib(provider_uri: str, region: str) -> bool:
     """
-    Initialize qlib with the specified configuration.
+    Initialize Qlib with the specified configuration settings.
+    
+    This function prepares the Qlib environment by:
+    1. Expanding the user home directory if the path contains '~'
+    2. Creating the necessary directories if they don't exist
+    3. Initializing Qlib with the specified provider URI and region
     
     Args:
-        provider_uri: Path to store qlib data
-        region: Data region (cn/us)
+        provider_uri: Path to store Qlib data. Supports tilde (~) notation.
+        region: Data region to use, either 'cn' (China) or 'us' (United States)
         
     Returns:
-        bool: True if initialization successful, False otherwise
+        bool: True if initialization was successful, False otherwise
+        
+    Raises:
+        Any exceptions during initialization will be caught and logged
     """
     try:
         # Expand user home directory if present
@@ -153,11 +185,22 @@ def get_future_instruments(contract_codes: List[str]) -> List[str]:
     """
     Get valid future instrument IDs for the specified contract codes.
     
+    This function:
+    1. Retrieves all available future instruments from Qlib
+    2. Filters them to match the provided contract codes
+    3. Returns the complete list of matching instrument IDs
+    
+    For example, if 'CU' is provided, it will return all copper future contracts
+    like 'CU2301', 'CU2302', etc.
+    
     Args:
-        contract_codes: List of contract codes (e.g., ['CU', 'AL'])
+        contract_codes: List of contract codes to filter by (e.g., ['CU', 'AL'])
         
     Returns:
-        List[str]: List of valid instrument IDs
+        List[str]: List of valid instrument IDs that match the contract codes
+        
+    Raises:
+        Any exceptions during instrument retrieval will be caught and logged
     """
     try:
         # Get all future instruments
@@ -181,12 +224,20 @@ def load_existing_data(output_path: str, filename: str) -> Optional[pd.DataFrame
     """
     Load existing data file if it exists, for resuming download.
     
+    This function is used for the resume functionality. It checks if a CSV data file
+    already exists and attempts to load it if available.
+    
     Args:
-        output_path: Path to the data directory
-        filename: Base filename without extension
+        output_path: Path to the directory where data files are stored
+        filename: Base filename without extension (e.g., 'future_data')
         
     Returns:
-        Optional[pd.DataFrame]: Loaded data if exists, None otherwise
+        Optional[pd.DataFrame]: Loaded data DataFrame if the file exists and can be loaded,
+                               None otherwise
+        
+    Notes:
+        - The function assumes the data uses a MultiIndex with instrument and date
+        - Any errors during loading are caught and logged
     """
     csv_path = Path(output_path) / f"{filename}.csv"
     if csv_path.exists():
@@ -202,13 +253,20 @@ def load_existing_data(output_path: str, filename: str) -> Optional[pd.DataFrame
 
 def get_latest_date(data: pd.DataFrame) -> Optional[str]:
     """
-    Get the latest date from the existing data.
+    Extract the latest date from the existing data DataFrame.
+    
+    This function is used for the resume functionality to determine where to start
+    downloading new data from.
     
     Args:
-        data: Existing data DataFrame
+        data: Existing data DataFrame with a MultiIndex (instrument, date)
         
     Returns:
-        Optional[str]: Latest date in YYYY-MM-DD format, or None if no data
+        Optional[str]: Latest date in YYYY-MM-DD format if data exists, None otherwise
+        
+    Notes:
+        - Assumes the DataFrame has a MultiIndex where level 1 contains dates
+        - Dates are converted to datetime objects for proper comparison
     """
     if data is None or data.empty:
         return None
@@ -233,21 +291,34 @@ def download_futures_data_in_chunks(
     resume: bool = False
 ) -> Optional[pd.DataFrame]:
     """
-    Download futures data in chunks with resume capability.
+    Download futures data in manageable chunks with built-in resume capability.
+    
+    This is the core function for downloading data with robustness features. It:
+    1. Handles resuming from previous downloads if requested
+    2. Divides the date range into smaller chunks for efficient processing
+    3. Saves checkpoints after each chunk to enable resumption
+    4. Merges chunk data while avoiding duplicates
+    5. Handles errors gracefully by saving partial progress
     
     Args:
-        instruments: List of instrument IDs
-        freq: Data frequency
-        fields: List of data fields to download
-        output_path: Path to save checkpoint data
-        filename: Base filename for checkpoint
-        start_date: Start date
-        end_date: End date
-        chunk_size: Number of days to download in each chunk
-        resume: Whether to resume from previous checkpoint
+        instruments: List of instrument IDs to download data for
+        freq: Data frequency (e.g., '1min', '5min', '1d')
+        fields: List of data fields to download (e.g., ['open', 'close', 'volume'])
+        output_path: Path where checkpoint and final data will be saved
+        filename: Base filename for the data files (without extension)
+        start_date: Start date for the data download (YYYY-MM-DD format)
+        end_date: End date for the data download (YYYY-MM-DD format)
+        chunk_size: Number of days to download in each chunk (default: 30)
+        resume: Whether to attempt resuming from an existing data file
         
     Returns:
-        Optional[pd.DataFrame]: Downloaded data, or None if failed
+        Optional[pd.DataFrame]: The complete downloaded data if successful,
+                               or None if the download failed
+        
+    Notes:
+        - Field names are automatically prefixed with '$' for Qlib compatibility
+        - Default date range is the last 365 days if not specified
+        - Checkpoint files are removed after successful completion
     """
     try:
         # Convert fields to qlib format (add $ prefix)
@@ -364,15 +435,25 @@ def download_futures_data_in_chunks(
 
 def save_checkpoint(data: pd.DataFrame, output_path: str, filename: str) -> bool:
     """
-    Save data as a checkpoint.
+    Save data as a checkpoint during the download process.
+    
+    This function is used to save intermediate progress during chunked downloads,
+    enabling the resume functionality. It saves data in both CSV and Parquet formats
+    (when pyarrow is available).
     
     Args:
-        data: DataFrame to save
-        output_path: Path to save directory
-        filename: Base filename without extension
+        data: DataFrame containing the data to save
+        output_path: Path to the directory where checkpoints will be stored
+        filename: Base filename for the checkpoint files (without extension)
         
     Returns:
-        bool: True if successful, False otherwise
+        bool: True if the checkpoint was saved successfully, False otherwise
+        
+    Notes:
+        - Automatically creates the output directory if it doesn't exist
+        - Always saves in CSV format for compatibility
+        - Saves in Parquet format if pyarrow is installed (better compression and performance)
+        - Logs detailed information about the checkpoint saving process
     """
     try:
         # Ensure output directory exists
@@ -407,17 +488,26 @@ def download_futures_data(
     end_date: Optional[str] = None
 ) -> Optional[pd.DataFrame]:
     """
-    Download futures data using qlib.
+    Download futures data using Qlib's D.features API in a single request.
+    
+    This is a simplified version of the download function that retrieves data
+    for the entire date range in one go. It's less robust than the chunked version
+    but can be faster for smaller datasets.
     
     Args:
-        instruments: List of instrument IDs
-        freq: Data frequency
-        fields: List of data fields to download
-        start_date: Start date
-        end_date: End date
+        instruments: List of instrument IDs to download data for
+        freq: Data frequency (e.g., '1min', '5min', '1d')
+        fields: List of data fields to download (e.g., ['open', 'close', 'volume'])
+        start_date: Optional start date for the data download (YYYY-MM-DD format)
+        end_date: Optional end date for the data download (YYYY-MM-DD format)
         
     Returns:
-        Optional[pd.DataFrame]: Downloaded data, or None if failed
+        Optional[pd.DataFrame]: The downloaded data if successful, None if failed
+        
+    Notes:
+        - Field names are automatically prefixed with '$' for Qlib compatibility
+        - Does not include resume functionality
+        - Not recommended for very large date ranges due to potential timeouts
     """
     try:
         # Convert fields to qlib format (add $ prefix)
@@ -443,15 +533,25 @@ def download_futures_data(
 
 def save_data(data: pd.DataFrame, output_path: str, filename: str = 'futures_data') -> bool:
     """
-    Save the downloaded data to files.
+    Save the downloaded data to CSV and Parquet files.
+    
+    This function ensures the output directory exists and saves the data in
+    both CSV (for compatibility) and Parquet (for efficiency) formats.
     
     Args:
-        data: DataFrame containing the downloaded data
-        output_path: Path to save the data
-        filename: Base filename without extension
+        data: DataFrame containing the downloaded futures data
+        output_path: Path to the directory where data files will be saved
+        filename: Base filename for the output files (without extension)
         
     Returns:
-        bool: True if successful, False otherwise
+        bool: True if data was saved successfully in at least one format,
+              False if both formats failed
+        
+    Notes:
+        - Automatically creates the output directory if it doesn't exist
+        - Always saves in CSV format for maximum compatibility
+        - Saves in Parquet format if pyarrow is available (better for analytics)
+        - Logs information about successful saves and warnings/errors
     """
     try:
         # Ensure output directory exists
@@ -480,7 +580,19 @@ def save_data(data: pd.DataFrame, output_path: str, filename: str = 'futures_dat
 
 def main():
     """
-    Main function to run the futures data downloader.
+    Main function that orchestrates the futures data download process.
+    
+    This function implements the complete workflow:
+    1. Parses command-line arguments
+    2. Configures logging based on verbosity level
+    3. Initializes the Qlib environment
+    4. Processes contract codes and retrieves valid instruments
+    5. Handles field specification and data range
+    6. Downloads data using the chunked approach with resume capability
+    7. Sorts the final data for consistency
+    8. Saves the results to both CSV and Parquet files
+    
+    Exits with non-zero status code on any critical error.
     """
     # Parse command-line arguments
     parser = setup_argparse()
