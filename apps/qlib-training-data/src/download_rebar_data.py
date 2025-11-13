@@ -34,9 +34,9 @@ def initialize_datafeed(datafeed_name: str = "REST") -> bool:
     Initialize VNPY datafeed.
     """
     try:
-        datafeed = get_datafeed(datafeed_name)
+        datafeed = get_datafeed()
         datafeed.init()
-        logger.info(f"Datafeed '{datafeed_name}' initialized successfully")
+        logger.info(f"Datafeed  initialized successfully")
         return True
     except Exception as e:
         logger.error(f"Failed to initialize datafeed: {e}")
