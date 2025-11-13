@@ -123,7 +123,7 @@ def main():
     print("\n[调试] 开始获取期货代码映射表...")
     
     # 获取指定合约代码的数据
-    df = get_future_mapping(pro, args.ts_code)
+    df = get_future_mapping(args.ts_code)
     
     # 打印结果统计信息
     print("\n[调试] 获取数据完成，结果统计:")
