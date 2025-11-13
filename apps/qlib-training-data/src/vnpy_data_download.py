@@ -153,12 +153,12 @@ def parse_interval(interval_str: str) -> Interval:
     # Keep simple mapping for common intervals, but allow any input
     interval_map = {
         "1m": Interval.MINUTE,
-        "5m": Interval.MINUTE_5,
-        "15m": Interval.MINUTE_15,
-        "30m": Interval.MINUTE_30,
-        "60m": Interval.MINUTE_60,
+        "5m": Interval.MINUTE5,
+        "15m": Interval.MINUTE15,
+        "30m": Interval.MINUTE30,
+        "60m": Interval.MINUTE60,
         "h1": Interval.HOUR,
-        "h4": Interval.HOUR_4,
+        "h4": Interval.HOUR4,
         "d": Interval.DAILY,
         "w": Interval.WEEKLY,
         "M": Interval.MONTHLY
@@ -182,20 +182,20 @@ def parse_interval(interval_str: str) -> Interval:
             if minutes == 1:
                 return Interval.MINUTE
             elif minutes == 5:
-                return Interval.MINUTE_5
+                return Interval.MINUTE5
             elif minutes == 15:
-                return Interval.MINUTE_15
+                return Interval.MINUTE15
             elif minutes == 30:
-                return Interval.MINUTE_30
+                return Interval.MINUTE30
             elif minutes == 60:
-                return Interval.MINUTE_60
+                return Interval.MINUTE60
         elif interval_str_lower.startswith("h"):
             # Handle hour intervals like 'h1', 'h4'
             hours = int(interval_str_lower[1:])
             if hours == 1:
                 return Interval.HOUR
             elif hours == 4:
-                return Interval.HOUR_4
+                return Interval.HOUR4
         elif interval_str_lower == "day" or interval_str_lower == "daily":
             return Interval.DAILY
         elif interval_str_lower == "week" or interval_str_lower == "weekly":
