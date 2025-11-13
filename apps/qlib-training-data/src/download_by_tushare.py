@@ -17,5 +17,5 @@ df["trade_date"] = pd.to_datetime(df["trade_date"])
 df = df.sort_values("trade_date")
 
 # 保存为 CSV，使用 \n 作为行结束符以确保跨平台兼容性
-df.to_csv("rb_main_daily_tushare.csv", index=False, encoding="utf-8-sig", line_terminator='\n')
+df.to_csv("rb_main_daily_tushare.csv", index=False, encoding="utf-8-sig")
 print(f"数据已保存，共 {len(df)} 条记录")
