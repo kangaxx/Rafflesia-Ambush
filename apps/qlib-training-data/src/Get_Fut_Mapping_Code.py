@@ -7,6 +7,14 @@ from datetime import datetime
 # 设置 token（替换为你的实际 token）
 TOKEN = "80c4b7da4069bc6ef309b653dc5c6e421c8618b763a2772eb55fd33f"
 
+def remove_suffix(text, suffix):
+    """
+    移除字符串末尾的后缀
+    """
+    if text.endswith(suffix):
+        return text[:-len(suffix)]
+    return text
+
 def get_future_mapping(ts_code):
     """
     使用pro.fut_mapping函数获取指定期货代码的映射信息
@@ -36,6 +44,17 @@ def get_future_mapping(ts_code):
             print("[调试] 返回数据的列名:", df.columns.tolist())
             print("[调试] 返回数据前5行:")
             print(df.head())
+            
+            # 移除数据中的.SHF后缀
+            print("[调试] 开始移除数据中的.SHF后缀...")
+            # 遍历所有字符串类型的列
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    # 移除该列中所有字符串末尾的.SHF
+                    df[col] = df[col].apply(lambda x: remove_suffix(x, '.SHF') if isinstance(x, str) else x)
+            print("[调试] 移除.SHF后缀完成")
+            print("[调试] 处理后前5行数据:")
+            print(df.head())
         else:
             print(f"[调试] 未获取到 {ts_code} 的映射数据")
         
@@ -44,6 +63,15 @@ def get_future_mapping(ts_code):
     except Exception as e:
         print(f"获取期货映射信息时出错: {e}")
         return pd.DataFrame()
+
+def expand_user_path(path):
+    """
+    处理路径中的~符号，扩展为用户主目录
+    """
+    if path.startswith('~'):
+        home_dir = os.path.expanduser('~')
+        return os.path.join(home_dir, path[2:]) if path.startswith('~/') else home_dir
+    return path
 
 def save_to_csv(df, ts_code, output_dir):
     """
@@ -68,19 +96,23 @@ def save_to_csv(df, ts_code, output_dir):
     print("[调试] 缺失值统计:")
     print(df.isnull().sum())
     
-    # 确保输出目录存在
-    if output_dir and output_dir != '.':
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"[调试] 已确保输出目录存在: {output_dir}")
+    # 处理路径中的~符号
+    output_dir = expand_user_path(output_dir)
+    print(f"[调试] 扩展后的输出目录: {output_dir}")
     
-    # 生成文件名：mapping_ + ts_code.csv
-    file_name = f"mapping_{ts_code}.csv"
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"[调试] 已确保输出目录存在: {output_dir}")
+    
+    # 移除ts_code中的.SHF后缀用于文件名
+    ts_code_no_suffix = remove_suffix(ts_code, '.SHF')
+    print(f"[调试] 原始ts_code: {ts_code}, 移除.SHF后的ts_code: {ts_code_no_suffix}")
+    
+    # 生成文件名：mapping_ + ts_code_no_suffix.csv
+    file_name = f"mapping_{ts_code_no_suffix}.csv"
     
     # 组合完整的文件路径
-    if output_dir and output_dir != '.':
-        file_path = os.path.join(output_dir, file_name)
-    else:
-        file_path = file_name
+    file_path = os.path.join(output_dir, file_name)
     
     # 打印调试信息：保存参数
     print(f"[调试] 保存文件参数: file_path={file_path}, encoding=utf-8-sig")
@@ -100,7 +132,7 @@ def main():
     
     # 添加命令行参数
     parser.add_argument('--ts_code', type=str, required=True, help='期货合约代码，例如：CU2401.SHF')
-    parser.add_argument('--output_dir', type=str, default='.', help='输出文件保存路径，默认为当前目录')
+    parser.add_argument('--output_dir', type=str, default='~/.tushare', help='输出文件保存路径，默认为~/.tushare')
     parser.add_argument('--token', type=str, help='Tushare Pro接口的token')
     
     # 解析命令行参数
