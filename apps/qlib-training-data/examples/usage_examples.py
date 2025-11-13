@@ -97,6 +97,81 @@ def example_save_data():
     if features is None:
         print("✗ No data to save")
         return
+
+
+def example_futures_data_download():
+    """
+    Example 4: Download futures data using the qlib_download_future_data script.
+    
+    This example demonstrates how to use the futures data downloader script
+    with different command-line parameters.
+    """
+    print("\n=== Example 4: Futures Data Download ===")
+    print("\nThe following are example commands for downloading futures data:")
+    print("\n1. Basic usage - download multiple contracts:")
+    print("   python src/qlib_download_future_data.py --contracts CU,AL,ZN")
+    
+    print("\n2. Specify custom output path:")
+    print("   python src/qlib_download_future_data.py --contracts RU,BU --output-path ./data/futures")
+    
+    print("\n3. Set data frequency (e.g., 5-minute data):")
+    print("   python src/qlib_download_future_data.py --contracts IF,IC --freq 5min")
+    
+    print("\n4. Download data for a specific date range:")
+    print("   python src/qlib_download_future_data.py --contracts SC,MA --start-date 2023-01-01 --end-date 2023-12-31")
+    
+    print("\n5. Customize data fields:")
+    print("   python src/qlib_download_future_data.py --contracts FG,ZC --fields open,close,volume")
+    
+    print("\n6. Enable verbose logging:")
+    print("   python src/qlib_download_future_data.py --contracts A,B --verbose")
+    
+    print("\n7. Use resume functionality (after interruption):")
+    print("   python src/qlib_download_future_data.py --contracts CU,AL --resume")
+    
+    print("\n8. Adjust chunk size for large date ranges:")
+    print("   python src/qlib_download_future_data.py --contracts RU,BU --chunk-size 15 --start-date 2020-01-01 --end-date 2023-12-31")
+    
+    print("\n9. Resume with custom chunk size:")
+    print("   python src/qlib_download_future_data.py --contracts CU,AL,ZN --resume --chunk-size 10")
+
+
+def example_futures_data_integration():
+    """
+    Example 5: Integrate downloaded futures data with the data processor.
+    
+    This example shows how to use the downloaded futures data with the QlibDataProcessor
+    for further processing or feature engineering.
+    """
+    print("\n=== Example 5: Futures Data Integration ===")
+    
+    # Note: This example assumes you have already downloaded futures data using
+    # the qlib_download_future_data.py script
+    
+    # The steps would be:
+    # 1. Download futures data first using the command-line script
+    # 2. Load the downloaded data
+    # 3. Process it using QlibDataProcessor or other tools
+    
+    print("Integration workflow:")
+    print("1. Download data: python src/qlib_download_future_data.py --contracts CU,AL --output-path ./futures_data")
+    print("2. Load the data using pandas:")
+    print("   import pandas as pd")
+    print("   futures_data = pd.read_csv('./futures_data/futures_CU_AL_1d.csv')")
+    print("3. Process the data as needed for your trading strategy")
+
+
+def run_all_examples():
+    """Run all example functions."""
+    example_basic_usage()
+    example_custom_date_range()
+    example_save_data()
+    example_futures_data_download()
+    example_futures_data_integration()
+
+
+if __name__ == "__main__":
+    run_all_examples()
     
     # Create output directory
     output_dir = Path('output')
