@@ -81,8 +81,7 @@ def setup_argparse() -> argparse.ArgumentParser:
         "--interval",
         type=str,
         required=True,
-        help="Time interval for data. The input will be passed directly to VNPY with basic conversion."
-        " Common formats: '1m', '5m', '15m', 'h1', 'd', etc."
+        help="Time interval for data as string."
     )
     
     parser.add_argument(
@@ -137,78 +136,6 @@ def setup_argparse() -> argparse.ArgumentParser:
     
     return parser
 
-def parse_interval(interval_str: str) -> Interval:
-    """
-    Convert interval string to VNPY Interval enum.
-    
-    Args:
-        interval_str: Interval string as input by user
-        
-    Returns:
-        Interval: Corresponding VNPY Interval enum value
-        
-    Raises:
-        ValueError: If the interval string cannot be mapped to a supported Interval
-    """
-    # Keep simple mapping for common intervals, but allow any input
-    interval_map = {
-        "1m": Interval.MINUTE,
-        "5m": Interval.MINUTE5,
-        "15m": Interval.MINUTE15,
-        "30m": Interval.MINUTE30,
-        "60m": Interval.MINUTE60,
-        "h1": Interval.HOUR,
-        "h4": Interval.HOUR4,
-        "d": Interval.DAILY,
-        "w": Interval.WEEKLY,
-        "M": Interval.MONTHLY
-    }
-    
-    # Try exact match first
-    if interval_str in interval_map:
-        return interval_map[interval_str]
-    
-    # Try case-insensitive match
-    interval_str_lower = interval_str.lower()
-    for key, value in interval_map.items():
-        if key.lower() == interval_str_lower:
-            return value
-    
-    # If no match found, try to infer based on common patterns
-    try:
-        if interval_str_lower.startswith("m"):
-            # Handle minute intervals like 'm1', 'm5'
-            minutes = int(interval_str_lower[1:])
-            if minutes == 1:
-                return Interval.MINUTE
-            elif minutes == 5:
-                return Interval.MINUTE5
-            elif minutes == 15:
-                return Interval.MINUTE15
-            elif minutes == 30:
-                return Interval.MINUTE30
-            elif minutes == 60:
-                return Interval.MINUTE60
-        elif interval_str_lower.startswith("h"):
-            # Handle hour intervals like 'h1', 'h4'
-            hours = int(interval_str_lower[1:])
-            if hours == 1:
-                return Interval.HOUR
-            elif hours == 4:
-                return Interval.HOUR4
-        elif interval_str_lower == "day" or interval_str_lower == "daily":
-            return Interval.DAILY
-        elif interval_str_lower == "week" or interval_str_lower == "weekly":
-            return Interval.WEEKLY
-        elif interval_str_lower == "month" or interval_str_lower == "monthly":
-            return Interval.MONTHLY
-    except ValueError:
-        pass
-    
-    # If we can't map it, raise an error
-    raise ValueError(f"Could not map interval '{interval_str}' to a supported VNPY interval.\n" 
-                     f"Commonly used intervals: {list(interval_map.keys())}")
-
 def parse_exchange(exchange_str: str) -> Exchange:
     """
     Convert exchange string to VNPY Exchange enum.
@@ -249,7 +176,7 @@ def initialize_datafeed(datafeed_name: str) -> bool:
 def download_symbol_data(
     symbol: str,
     exchange: Exchange,
-    interval: Interval,
+    interval: str,
     start_date: datetime,
     end_date: datetime
 ) -> Optional[pd.DataFrame]:
@@ -267,11 +194,12 @@ def download_symbol_data(
         Optional[pd.DataFrame]: Downloaded data as pandas DataFrame, or None if failed
     """
     try:
+
         # Create history request
         req = HistoryRequest(
             symbol=symbol,
             exchange=exchange,
-            interval=interval,
+            interval=interval_enum,
             start=start_date,
             end=end_date
         )
@@ -365,9 +293,9 @@ def main():
         symbols = [s.strip() for s in args.symbol.split(",")]
         logger.info(f"Downloading data for symbols: {symbols}")
         
-        # Parse interval
-        interval = parse_interval(args.interval)
-        logger.info(f"Time interval (user input: {args.interval}, mapped to: {interval})")
+        # Use interval string directly
+        interval = args.interval
+        logger.info(f"Time interval: {interval}")
         
         # Parse exchange
         exchange = parse_exchange(args.exchange)
