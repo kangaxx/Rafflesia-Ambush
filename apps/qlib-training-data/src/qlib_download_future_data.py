@@ -48,7 +48,15 @@ def setup_argparse() -> argparse.ArgumentParser:
         "Example usage:\n"
         "  python qlib_download_future_data.py --contracts CU,AL,ZN\n"
         "  python qlib_download_future_data.py --contracts IF,IC --freq 5min --start-date 2023-01-01\n"
-        "  python qlib_download_future_data.py --contracts RU,BU --resume --chunk-size 15"
+        "  python qlib_download_future_data.py --contracts RU,BU --resume --chunk-size 15",
+        add_help=False  # 禁用默认的帮助参数，以便我们自定义
+    )
+    
+    # 添加自定义的帮助参数，包括--h和--help
+    parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
     )
     
     # Data storage configuration
