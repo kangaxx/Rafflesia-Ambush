@@ -6,6 +6,21 @@ from datetime import datetime
 
 # 设置 token（替换为你的实际 token）
 TOKEN = "80c4b7da4069bc6ef309b653dc5c6e421c8618b763a2772eb55fd33f"
+# 打印帮助信息的函数
+def print_help():
+    help_text = """
+    用法: python Get_Fut_Mapping_Code.py --ts_code <期货合约代码> [--output_dir <输出目录>] [--token <Tushare Token>]
+    
+    参数:
+    --ts_code: 期货合约代码，例如 'CU.SHF' (必需)
+    --output_dir: 输出文件保存路径，默认为 '~/.tushare'
+    --token: Tushare Pro接口的token，如果不提供则使用环境变量或配置文件中的token
+    
+    示例:
+    python Get_Fut_Mapping_Code.py --ts_code CU.SHF
+    python Get_Fut_Mapping_Code.py --ts_code CU.SHF --output_dir ~/data/futures --token your_token_here
+    """
+    print(help_text)
 
 def remove_suffix(text, suffix):
     """
@@ -116,9 +131,11 @@ def save_to_csv(df, ts_code, output_dir):
     
     # 打印调试信息：保存参数
     print(f"[调试] 保存文件参数: file_path={file_path}, encoding=utf-8-sig")
-    
+
+    # 倒置df,默认情况下数据是从最后一天往第一天写的
+    df_reversed = df[::-1]
     # 保存为CSV，使用UTF-8-SIG编码确保跨平台兼容性
-    df.to_csv(file_path, index=False, encoding="utf-8-sig")
+    df_reversed.to_csv(file_path, index=False, encoding="utf-8-sig")
     print(f"期货代码映射数据已保存到 {file_path}，共 {len(df)} 条记录")
     
     return file_path
@@ -127,17 +144,20 @@ def main():
     """
     主函数，处理命令行参数并执行获取期货代码映射表的操作
     """
+    # 如果没有提供任何参数，或者输入了参数-h 或者 --h ,显示帮助信息 并退出
+    import sys
+    if len(sys.argv) == 1 or '-h' in sys.argv or '--h' in sys.argv:
+        print_help()
+        sys.exit(0)
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(description="获取期货代码号映射表")
-    
     # 添加命令行参数
-    parser.add_argument('--ts_code', type=str, required=True, help='期货合约代码，例如：CU2401.SHF')
+    parser.add_argument('--ts_code', type=str, required=True, help='期货合约代码，例如：CU.SHF')
     parser.add_argument('--output_dir', type=str, default='~/.tushare', help='输出文件保存路径，默认为~/.tushare')
     parser.add_argument('--token', type=str, help='Tushare Pro接口的token')
     
     # 解析命令行参数
     args = parser.parse_args()
-    
     # 打印调试信息：命令行参数
     print("[调试] 命令行参数:")
     print(f"[调试] ts_code: {args.ts_code}")

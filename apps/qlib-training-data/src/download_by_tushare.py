@@ -6,7 +6,7 @@ ts.set_token("80c4b7da4069bc6ef309b653dc5c6e421c8618b763a2772eb55fd33f")
 pro = ts.pro_api()
 
 # 螺纹钢主力合约代码为 "RB9999.SHF"（上期所）
-df = pro.fut_daily(ts_code='CU1811.SHF', start_date='20180101', end_date='20181113')
+df = pro.fut_daily(ts_code='RB1511.SHF', start_date='20150101', end_date='20151113')
 
 # 转换日期格式并排序
 df["trade_date"] = pd.to_datetime(df["trade_date"])
