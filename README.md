@@ -15,10 +15,10 @@ The framework is designed as a modular system with the following components:
 ```
 Rafflesia-Ambush/
 ├── apps/                      # Application cluster
-│   ├── qlib-training-data/   # Training data generation (Python + qlib)
+│   ├── qlib-training-data/    # Training data generation (Python + qlib)
+│   ├── backtesting/           # Backtesting engine (Backtrader + tushare)
 │   ├── [future] ai-strategy/  # AI strategy models
 │   ├── [future] kline-predict/# K-line prediction
-│   ├── [future] backtesting/  # Backtesting engine
 │   └── [future] reporting/    # Report generation
 ├── scripts/                   # Server operation scripts
 └── docs/                      # Framework documentation
