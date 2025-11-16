@@ -131,7 +131,6 @@ def save_to_csv(df, ts_code, output_dir):
     
     # 打印调试信息：保存参数
     print(f"[调试] 保存文件参数: file_path={file_path}, encoding=utf-8-sig")
-
     # 倒置df,默认情况下数据是从最后一天往第一天写的
     df_reversed = df[::-1]
     # 保存为CSV，使用UTF-8-SIG编码确保跨平台兼容性
