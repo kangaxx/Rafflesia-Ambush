@@ -144,6 +144,7 @@ def main():
     # 初始化tushare
     pro = initialize_tushare(token)
     if not pro:
+        print("Tushare接口初始化失败")
         return
     
     # 设置保存目录
