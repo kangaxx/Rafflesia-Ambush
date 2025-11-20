@@ -111,7 +111,7 @@ def main():
     end_date = datetime.now().strftime("%Y%m%d")  # 使用当前日期作为结束日期
     
     # 设置保存目录
-    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'downloads')
+    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
     
     # 下载期货数据
     print("\n开始下载期货数据...")
