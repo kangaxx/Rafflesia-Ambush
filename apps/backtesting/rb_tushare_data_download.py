@@ -59,7 +59,7 @@ def _download_rb_future_contracts(pro, save_dir=None):
             exchange='SHF',  # 上海期货交易所
             fut_type='1',    # 1: 期货
             fields='ts_code,symbol,name,exchange,list_date,delist_date,status',
-            name='%螺纹钢%'  # 模糊匹配螺纹钢
+            name='RB.SHF' 
         )
         
         if df.empty:
