@@ -11,7 +11,7 @@ def get_tushare_token():
     # 获取当前脚本所在目录
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # 构建key.json文件的绝对路径
-    key_file_path = os.path.join(script_dir, 'data', 'key.json')
+    key_file_path = os.path.join(script_dir, 'key.json')
     
     try:
         with open(key_file_path, 'r', encoding='utf-8') as f:
