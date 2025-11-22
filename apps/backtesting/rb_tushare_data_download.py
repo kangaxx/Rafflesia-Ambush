@@ -551,9 +551,8 @@ def main():
         
         print(f"将下载{len(contracts_data)}个合约的数据")
         
-        # 创建合约数据专用目录
-        contracts_dir = os.path.join(save_dir, f"{args.fut_code}_contracts")
-        os.makedirs(contracts_dir, exist_ok=True)
+        # 使用参数配置的路径作为下载目录
+        contracts_dir = save_dir
         print(f"合约数据将保存到: {contracts_dir}")
         
         # 统计信息
@@ -596,6 +595,8 @@ def main():
             filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
+            # 注意：这里只检查文件是否存在，但没有验证文件内容的完整性和有效性
+            # 在某些情况下，可能存在空文件或损坏文件，需要更严格的验证
             file_exists = os.path.exists(filepath)
             if file_exists:
                 files_already_exist += 1
@@ -609,7 +610,7 @@ def main():
                 'filepath': filepath,
                 'file_exists': file_exists
             })
-            
+            print(contracts_to_download)
             # 打印合约信息
             status = "文件已存在" if file_exists else "将下载"
             print(f"[{idx+1}] {contract_code} ({contract_name}) - {status}")
@@ -664,6 +665,8 @@ def main():
             filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
+            # 注意：这里只检查文件是否存在，但没有验证文件内容的完整性和有效性
+            # 在某些情况下，可能存在空文件或损坏文件，需要更严格的验证
             if file_exists:
                 print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 文件已存在，跳过")
                 continue
