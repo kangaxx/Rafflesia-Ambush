@@ -266,8 +266,8 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
             # 确保保存目录存在
             os.makedirs(save_dir, exist_ok=True)
             
-            # 构建保存文件路径
-            filename = f"{symbol}_{start_date}_{end_date}.csv"
+            # 简化文件名，只使用合约代码+.csv格式
+            filename = f"{symbol}.csv"
             filepath = os.path.join(save_dir, filename)
             
             # 保存数据
@@ -591,23 +591,8 @@ def main():
             if contract_start > contract_end:
                 continue
             
-            # 尝试从合约代码中提取年月信息，用于文件名前缀
-            year_month_prefix = ""
-            try:
-                # 提取点号前的部分，然后取最后4位作为年月信息
-                code_part = contract_code.split('.')[0]
-                if len(code_part) >= 4:
-                    year_month_str = code_part[-4:]
-                    if year_month_str.isdigit():
-                        year_month_prefix = year_month_str
-            except Exception:
-                pass
-            
-            # 构建文件名
-            if year_month_prefix:
-                filename = f"{year_month_prefix}_{contract_code}_{contract_start}_{contract_end}.csv"
-            else:
-                filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
+            # 简化文件名，只使用合约代码+.csv格式
+            filename = f"{contract_code}.csv"
             filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
@@ -674,17 +659,9 @@ def main():
                 print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 日期范围无重叠，跳过")
                 continue
             
-            # 尝试从合约代码中提取年月信息，用于文件名前缀以确保按年月排序
-            year_month_prefix = ""
-            try:
-                # 提取点号前的部分，然后取最后4位作为年月信息
-                code_part = contract_code.split('.')[0]
-                if len(code_part) >= 4:
-                    year_month_str = code_part[-4:]
-                    if year_month_str.isdigit():
-                        year_month_prefix = year_month_str
-            except Exception:
-                pass
+            # 简化文件名，只使用合约代码+.csv格式
+            filename = f"{contract_code}.csv"
+            filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
             if file_exists:
