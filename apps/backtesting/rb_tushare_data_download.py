@@ -174,6 +174,9 @@ def main():
   # 使用联动模式下载所有合约数据，并指定日期范围
   python rb_tushare_data_download.py -s RB.SHF -m 2 -b 20230101 -e 20231231
   
+  # 螺纹钢模式2下载范例：下载所有螺纹钢合约2020年至2023年的数据
+  python rb_tushare_data_download.py -s RB.SHF -m 2 -b 20200101 -e 20231231
+  
   # 下载其他期货品种数据（例如铜期货，使用SHF作为交易所标识）
   python rb_tushare_data_download.py -s CU.SHF -b 20230601 -e 20230930
   
@@ -320,9 +323,19 @@ def main():
             list_date = contract['list_date']
             delist_date = contract['delist_date']
             
-            # 使用合约的上市日期和退市日期，但受限于用户指定的日期范围
-            contract_start = max(list_date, start_date)
-            contract_end = min(delist_date, end_date)
+            # 模式2特殊处理：如果用户未指定起止日期（使用默认值），则使用合约的完整历史数据
+            # 检查是否使用了默认的起始日期和结束日期
+            using_default_dates = (args.start_date == '20130101' and args.end_date == datetime.now().strftime("%Y%m%d"))
+            
+            if using_default_dates:
+                # 使用合约的完整历史数据
+                contract_start = list_date
+                contract_end = delist_date
+                print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 使用全历史数据")
+            else:
+                # 使用用户指定的日期范围限制
+                contract_start = max(list_date, start_date)
+                contract_end = min(delist_date, end_date)
             
             # 检查是否有重叠的日期范围
             if contract_start > contract_end:
