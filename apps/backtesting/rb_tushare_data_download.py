@@ -4,6 +4,7 @@ import tushare as ts
 import pandas as pd
 from datetime import datetime
 import argparse
+import re
 
 def get_tushare_token():
     """
@@ -136,18 +137,76 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
         print(f"错误：下载 {symbol} 数据失败 - {str(e)}")
         return None
 
+def validate_date_format(date_str):
+    """验证日期格式是否为YYYYMMDD"""
+    pattern = r'^\d{8}$'
+    if not re.match(pattern, date_str):
+        return False
+    try:
+        # 尝试解析日期确保有效性
+        datetime.strptime(date_str, '%Y%m%d')
+        return True
+    except ValueError:
+        return False
+
 def main():
     # 创建命令行参数解析器
-    parser = argparse.ArgumentParser(description='下载螺纹钢期货数据')
+    parser = argparse.ArgumentParser(
+        description='下载期货数据工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""使用示例：
+  # 使用默认参数下载螺纹钢期货数据
+  python rb_tushare_data_download.py
+  
+  # 指定参数下载螺纹钢期货数据
+  python rb_tushare_data_download.py --symbol RB.SHF --start_date 20230101 --end_date 20231231 --fut_code RB
+  
+  # 下载其他期货品种数据（例如铜期货）
+  python rb_tushare_data_download.py --symbol CU.SHF --start_date 20230601 --end_date 20230930 --fut_code CU
+        """
+    )
     
     # 添加参数
-    parser.add_argument('--symbol', type=str, default='RB.SHF', help='期货代码，默认: RB.SHF')
-    parser.add_argument('--start_date', type=str, default='20130101', help='开始日期，格式: YYYYMMDD，默认: 20130101')
-    parser.add_argument('--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，格式: YYYYMMDD，默认: 当前日期')
-    parser.add_argument('--fut_code', type=str, default='RB', help='期货品种代码标识，默认: RB')
+    parser.add_argument('--symbol', type=str, default='RB.SHF', help='期货代码，格式为"品种.交易所"，例如: RB.SHF')
+    parser.add_argument('--start_date', type=str, default='20130101', help='开始日期，必须为YYYYMMDD格式，例如: 20230101')
+    parser.add_argument('--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，必须为YYYYMMDD格式，例如: 20231231')
+    parser.add_argument('--fut_code', type=str, default='RB', help='期货品种代码标识，用于查询合约信息，例如: RB')
     
     # 解析参数
     args = parser.parse_args()
+    
+    # 参数验证
+    if not validate_date_format(args.start_date):
+        parser.error(f'开始日期格式错误: {args.start_date}。请使用YYYYMMDD格式，例如: 20230101')
+    
+    if not validate_date_format(args.end_date):
+        parser.error(f'结束日期格式错误: {args.end_date}。请使用YYYYMMDD格式，例如: 20231231')
+    
+    # 检查开始日期是否早于结束日期
+    start_dt = datetime.strptime(args.start_date, '%Y%m%d')
+    end_dt = datetime.strptime(args.end_date, '%Y%m%d')
+    
+    if start_dt > end_dt:
+        parser.error(f'开始日期({args.start_date})不能晚于结束日期({args.end_date})')
+    
+    # 检查结束日期不能超过当前日期
+    current_dt = datetime.now()
+    if end_dt > current_dt:
+        parser.error(f'结束日期({args.end_date})不能超过当前日期')
+    
+    # 验证symbol格式
+    if '.' not in args.symbol:
+        parser.error(f'期货代码格式错误: {args.symbol}。正确格式为"品种.交易所"，例如: RB.SHF')
+    
+    # 验证交易所标识（常见的期货交易所）
+    valid_exchanges = ['SHFE', 'DCE', 'CZCE', 'CFFEX', 'INE']
+    exchange = args.symbol.split('.')[-1].upper()
+    if exchange not in valid_exchanges:
+        parser.error(f'无效的交易所标识: {exchange}。有效的交易所为: {', '.join(valid_exchanges)}')
+    
+    # 验证fut_code不为空
+    if not args.fut_code or args.fut_code.strip() == '':
+        parser.error('期货品种代码标识(fut_code)不能为空')
     
     # 获取tushare token
     token = get_tushare_token()
