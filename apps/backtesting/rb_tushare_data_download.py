@@ -564,7 +564,11 @@ def main():
         # 确保合约数据按年月排序
         contracts_data = sort_contracts_by_date(contracts_data)
         
-        # 逐个下载合约数据
+        # 预览将要下载的合约及其文件状态
+        print(f"\n将下载的合约预览:")
+        contracts_to_download = []
+        files_already_exist = 0
+        
         for idx, contract in contracts_data.iterrows():
             contract_code = contract['ts_code']
             contract_name = contract['name']
@@ -572,18 +576,98 @@ def main():
             delist_date = contract['delist_date']
             
             # 模式2特殊处理：如果用户未指定起止日期（使用默认值），则使用合约的完整历史数据
-            # 检查是否使用了默认的起始日期和结束日期
             using_default_dates = (args.start_date == '20130101' and args.end_date == datetime.now().strftime("%Y%m%d"))
             
             if using_default_dates:
                 # 使用合约的完整历史数据
                 contract_start = list_date
                 contract_end = delist_date
-                print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 使用全历史数据")
             else:
                 # 使用用户指定的日期范围限制
                 contract_start = max(list_date, start_date)
                 contract_end = min(delist_date, end_date)
+            
+            # 检查是否有重叠的日期范围
+            if contract_start > contract_end:
+                continue
+            
+            # 尝试从合约代码中提取年月信息，用于文件名前缀
+            year_month_prefix = ""
+            try:
+                # 提取点号前的部分，然后取最后4位作为年月信息
+                code_part = contract_code.split('.')[0]
+                if len(code_part) >= 4:
+                    year_month_str = code_part[-4:]
+                    if year_month_str.isdigit():
+                        year_month_prefix = year_month_str
+            except Exception:
+                pass
+            
+            # 构建文件名
+            if year_month_prefix:
+                filename = f"{year_month_prefix}_{contract_code}_{contract_start}_{contract_end}.csv"
+            else:
+                filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
+            filepath = os.path.join(contracts_dir, filename)
+            
+            # 检查文件是否已存在
+            file_exists = os.path.exists(filepath)
+            if file_exists:
+                files_already_exist += 1
+            
+            # 添加到待下载列表
+            contracts_to_download.append({
+                'index': idx,
+                'contract': contract,
+                'contract_start': contract_start,
+                'contract_end': contract_end,
+                'filepath': filepath,
+                'file_exists': file_exists
+            })
+            
+            # 打印合约信息
+            status = "文件已存在" if file_exists else "将下载"
+            print(f"[{idx+1}] {contract_code} ({contract_name}) - {status}")
+        
+        # 显示统计信息
+        total_to_process = len(contracts_to_download)
+        will_download = total_to_process - files_already_exist
+        print(f"\n预览统计:")
+        print(f"- 总共将处理合约数: {total_to_process}")
+        print(f"- 文件已存在: {files_already_exist}")
+        print(f"- 将要下载: {will_download}")
+        
+        # 询问用户是否继续
+        while True:
+            user_input = input("\n是否继续下载? (Y/N): ").strip().lower()
+            if user_input in ['y', 'n']:
+                break
+            print("请输入 Y 或 N")
+        
+        if user_input != 'y':
+            print("用户取消下载操作")
+            return
+        
+        print(f"\n开始下载...")
+        
+        # 逐个下载合约数据
+        for item in contracts_to_download:
+            # 获取合约信息
+            contract = item['contract']
+            idx = item['index']
+            contract_code = contract['ts_code']
+            contract_name = contract['name']
+            contract_start = item['contract_start']
+            contract_end = item['contract_end']
+            filepath = item['filepath']
+            file_exists = item['file_exists']
+            
+            # 模式2特殊处理：如果用户未指定起止日期（使用默认值），则使用合约的完整历史数据
+            # 检查是否使用了默认的起始日期和结束日期
+            using_default_dates = (args.start_date == '20130101' and args.end_date == datetime.now().strftime("%Y%m%d"))
+            
+            if using_default_dates:
+                print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 使用全历史数据")
             
             # 检查是否有重叠的日期范围
             if contract_start > contract_end:
@@ -602,14 +686,8 @@ def main():
             except Exception:
                 pass
             
-            # 构建文件名并检查是否已存在（添加年月前缀确保按年月排序）
-            if year_month_prefix:
-                filename = f"{year_month_prefix}_{contract_code}_{contract_start}_{contract_end}.csv"
-            else:
-                filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
-            filepath = os.path.join(contracts_dir, filename)
-            
-            if os.path.exists(filepath):
+            # 检查文件是否已存在
+            if file_exists:
                 print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 文件已存在，跳过")
                 continue
             
