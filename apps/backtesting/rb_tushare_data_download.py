@@ -385,16 +385,18 @@ def main():
                     # 尝试一个简单的调用以获取最新错误信息
                     test_df = pro.fut_basic(exchange='SHFE', fut_type='1', fields='ts_code', fut_code='RB', limit=1)
                     # 如果成功获取数据，说明不是限制为0的情况
-                    print("遇到tushare接口频率限制，等待60秒后重试...")
-                    # 等待60秒
-                    for i in range(60, 0, -1):
-                        print(f"剩余等待时间: {i}秒", end='\r')
-                        time.sleep(1)
-                    print()  # 换行
-                    
-                    # 重新尝试下载当前合约
-                    print(f"重新尝试下载 {contract_code} ({contract_name}) 的数据...")
-                    contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
+                    # Properly check if DataFrame is valid
+                    if test_df is not None and hasattr(test_df, 'empty') and not test_df.empty:
+                        print("遇到tushare接口频率限制，等待60秒后重试...")
+                        # 等待60秒
+                        for i in range(60, 0, -1):
+                            print(f"剩余等待时间: {i}秒", end='\r')
+                            time.sleep(1)
+                        print()  # 换行
+                        
+                        # 重新尝试下载当前合约
+                        print(f"重新尝试下载 {contract_code} ({contract_name}) 的数据...")
+                        contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
                 except Exception as e_test:
                     error_test_msg = str(e_test)
                     # 检查是否包含限制为0次的信息
@@ -410,9 +412,14 @@ def main():
                         # 提前结束循环
                         break
             
-            if contract_data is not None:
-                successful_downloads += 1
-                print(f"  ✓ 下载成功，共{len(contract_data)}条记录")
+            # Properly handle contract_data in various cases
+            if contract_data is not None and contract_data != -1:
+                # Ensure contract_data is a DataFrame and not empty
+                if hasattr(contract_data, 'empty') and not contract_data.empty:
+                    successful_downloads += 1
+                    print(f"  ✓ 下载成功，共{len(contract_data)}条记录")
+                else:
+                    print(f"  ✗ 下载失败：未获取到有效数据")
             else:
                 print(f"  ✗ 下载失败")
         
