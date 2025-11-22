@@ -554,7 +554,7 @@ def main():
                         break
             
             # Properly handle contract_data in various cases
-            if contract_data is not None and contract_data != -1:
+            if contract_data is not None and not (isinstance(contract_data, int) and contract_data == -1):
                 # Ensure contract_data is a DataFrame and not empty
                 if hasattr(contract_data, 'empty') and not contract_data.empty:
                     successful_downloads += 1
