@@ -285,9 +285,78 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
     print(f"数据将保存到: {save_dir}")
     
-    # 下载期货合约基本信息
-    print(f"\n开始下载{args.fut_code}期货合约基本信息...")
-    contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+    # 模式2特殊处理：检查合约列表文件是否存在
+    contracts_file_path = None
+    if args.work_mode == 2:
+        # 构建预期的合约信息文件名
+        contracts_file_name = f"{args.fut_code}_1_future_contracts_info.csv"
+        contracts_file_path = os.path.join(save_dir, contracts_file_name)
+        
+        # 检查文件是否存在
+        if os.path.exists(contracts_file_path):
+            try:
+                # 尝试读取文件
+                saved_contracts_data = pd.read_csv(contracts_file_path)
+                total_records = len(saved_contracts_data)
+                
+                print(f"\n发现已存在的期货合约列表文件: {contracts_file_path}")
+                print(f"文件包含 {total_records} 条合约记录")
+                print("\n前10条合约数据预览:")
+                print(saved_contracts_data.head(10))
+                
+                display_index = 10  # 已显示的记录数
+                use_saved_file = False
+                
+                # 用户交互循环
+                while True:
+                    user_input = input("\n请选择操作: [Y]使用文件 [N]重新调用接口 [M]查看更多数据: ").strip().lower()
+                    
+                    if user_input == 'y':
+                        use_saved_file = True
+                        contracts_data = saved_contracts_data
+                        print("\n将使用文件中的合约信息...")
+                        break
+                    elif user_input == 'n':
+                        use_saved_file = False
+                        print("\n将重新调用接口获取最新合约信息...")
+                        break
+                    elif user_input == 'm':
+                        if display_index < total_records:
+                            # 显示接下来的10条记录
+                            end_index = min(display_index + 10, total_records)
+                            print(f"\n接下来的10条合约数据(记录 {display_index+1}-{end_index}):")
+                            print(saved_contracts_data.iloc[display_index:end_index])
+                            display_index = end_index
+                            
+                            # 如果已经显示完所有数据，提示用户
+                            if display_index >= total_records:
+                                print("\n已显示所有合约数据")
+                        else:
+                            print("\n已显示所有合约数据")
+                    else:
+                        print("无效输入，请输入 Y、N 或 M")
+                
+                # 如果用户选择使用保存的文件，则跳过接口调用
+                if use_saved_file:
+                    # 跳过后续的接口调用
+                    pass
+                else:
+                    # 用户选择重新调用接口
+                    print(f"\n开始下载{args.fut_code}期货合约基本信息...")
+                    contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+            except Exception as e:
+                print(f"读取合约列表文件失败: {str(e)}")
+                print("将重新调用接口获取合约信息...")
+                print(f"\n开始下载{args.fut_code}期货合约基本信息...")
+                contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+        else:
+            # 文件不存在，调用接口获取
+            print(f"\n开始下载{args.fut_code}期货合约基本信息...")
+            contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+    else:
+        # 非模式2，直接调用接口
+        print(f"\n开始下载{args.fut_code}期货合约基本信息...")
+        contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
     
     # 打印合约信息样例
     if contracts_data is not None:
