@@ -590,8 +590,10 @@ def main():
             if contract_start > contract_end:
                 continue
             
-            # 简化文件名，只使用合约代码+.csv格式
-            filename = f"{contract_code}.csv"
+            # 简化文件名，去掉交易所代码部分，只使用品种代码+.csv格式
+            # 例如：RB2401.SHF -> RB2401.csv
+            simple_code = contract_code.split('.')[0] if '.' in contract_code else contract_code
+            filename = f"{simple_code}.csv"
             filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
@@ -659,8 +661,10 @@ def main():
                 print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 日期范围无重叠，跳过")
                 continue
             
-            # 简化文件名，只使用合约代码+.csv格式
-            filename = f"{contract_code}.csv"
+            # 简化文件名，去掉交易所代码部分，只使用品种代码+.csv格式
+            # 例如：RB2401.SHF -> RB2401.csv
+            simple_code = contract_code.split('.')[0] if '.' in contract_code else contract_code
+            filename = f"{simple_code}.csv"
             filepath = os.path.join(contracts_dir, filename)
             
             # 检查文件是否已存在
