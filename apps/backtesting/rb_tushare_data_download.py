@@ -8,6 +8,85 @@ import re
 import time
 import numpy as np
 
+def handle_download_failure(pro, contract_code, contract_name, contract_start, contract_end, save_dir, auto_wait_mode_ref):
+    """
+    处理下载失败的情况
+    
+    参数:
+    - pro: Tushare Pro接口实例
+    - contract_code: 合约代码
+    - contract_name: 合约名称
+    - contract_start: 开始日期
+    - contract_end: 结束日期
+    - save_dir: 保存目录
+    - auto_wait_mode_ref: 自动等待模式标志（通过列表引用传递）
+    
+    返回值:
+    - 更新后的contract_data（如果重试成功）或None
+    """
+    # 如果处于自动等待模式，直接等待1分钟后继续
+    if auto_wait_mode_ref[0]:
+        print(f"  自动等待模式：等待1分钟后继续下载...")
+        for i in range(60, 0, -1):
+            print(f"  剩余等待时间: {i}秒", end='\r')
+            time.sleep(1)
+        print()  # 换行
+        
+        # 尝试重新下载
+        print(f"  重新尝试下载 {contract_code} ({contract_name}) 的数据...")
+        retry_data = download_future_data(pro, contract_code, contract_start, contract_end, save_dir)
+        return retry_data
+    
+    # 非自动模式，等待用户输入
+    while True:
+        print(f"\n下载失败处理选项:")
+        print(f"  W/w - 等待1分钟后继续下载")
+        print(f"  E/e - 退出程序")
+        print(f"  R/r - 立即重试")
+        print(f"  C/c - 等待1分钟后自动模式（后续失败不再询问）")
+        
+        user_choice = input("请选择操作 [W/E/R/C]: ").strip().lower()
+        
+        if user_choice == 'w':
+            print(f"  等待1分钟后继续下载...")
+            for i in range(60, 0, -1):
+                print(f"  剩余等待时间: {i}秒", end='\r')
+                time.sleep(1)
+            print()  # 换行
+            
+            # 尝试重新下载
+            print(f"  重新尝试下载 {contract_code} ({contract_name}) 的数据...")
+            retry_data = download_future_data(pro, contract_code, contract_start, contract_end, save_dir)
+            return retry_data
+        
+        elif user_choice == 'e':
+            print(f"\n用户选择退出程序。")
+            exit(0)
+        
+        elif user_choice == 'r':
+            print(f"  立即重试下载 {contract_code} ({contract_name}) 的数据...")
+            retry_data = download_future_data(pro, contract_code, contract_start, contract_end, save_dir)
+            return retry_data
+        
+        elif user_choice == 'c':
+            print(f"  等待1分钟后进入自动模式...")
+            for i in range(60, 0, -1):
+                print(f"  剩余等待时间: {i}秒", end='\r')
+                time.sleep(1)
+            print()  # 换行
+            
+            # 设置自动等待模式标志
+            auto_wait_mode_ref[0] = True
+            print(f"  已进入自动等待模式：后续下载失败将自动等待1分钟后重试")
+            
+            # 尝试重新下载
+            print(f"  重新尝试下载 {contract_code} ({contract_name}) 的数据...")
+            retry_data = download_future_data(pro, contract_code, contract_start, contract_end, save_dir)
+            return retry_data
+        
+        else:
+            print("无效的选择，请重新输入。")
+
 def sort_contracts_by_date(contracts_df):
     """
     对期货合约数据按照年月进行排序，将不符合产品代码+YY+MM格式的数据放在最后
@@ -282,6 +361,8 @@ def main():
     args = parser.parse_args()
     
     # 参数验证
+    # 自动等待模式标志（使用列表实现引用传递）
+    auto_wait_mode = [False]
     if not validate_date_format(args.start_date):
         parser.error(f'开始日期格式错误: {args.start_date}。请使用YYYYMMDD格式，例如: 20230101')
     
@@ -561,8 +642,26 @@ def main():
                     print(f"  ✓ 下载成功，共{len(contract_data)}条记录")
                 else:
                     print(f"  ✗ 下载失败：未获取到有效数据")
+                    # 处理下载失败情况
+                    retry_data = handle_download_failure(pro, contract_code, contract_name, contract_start, contract_end, contracts_dir, auto_wait_mode)
+                    # 检查重试结果
+                    if retry_data is not None and not (isinstance(retry_data, int) and retry_data == -1):
+                        if hasattr(retry_data, 'empty') and not retry_data.empty:
+                            successful_downloads += 1
+                            print(f"  ✓ 重试成功，共{len(retry_data)}条记录")
+                        else:
+                            print(f"  ✗ 重试也失败：未获取到有效数据")
             else:
                 print(f"  ✗ 下载失败")
+                # 处理下载失败情况
+                retry_data = handle_download_failure(pro, contract_code, contract_name, contract_start, contract_end, contracts_dir, auto_wait_mode)
+                # 检查重试结果
+                if retry_data is not None and not (isinstance(retry_data, int) and retry_data == -1):
+                    if hasattr(retry_data, 'empty') and not retry_data.empty:
+                        successful_downloads += 1
+                        print(f"  ✓ 重试成功，共{len(retry_data)}条记录")
+                    else:
+                        print(f"  ✗ 重试也失败：未获取到有效数据")
         
         # 打印汇总信息
         print(f"\n联动模式下载完成！")
