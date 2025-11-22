@@ -559,6 +559,10 @@ def main():
         # 统计信息
         total_contracts = len(contracts_data)
         successful_downloads = 0
+        failed_downloads = 0  # 新增失败计数变量
+        
+        # 确保合约数据按年月排序
+        contracts_data = sort_contracts_by_date(contracts_data)
         
         # 逐个下载合约数据
         for idx, contract in contracts_data.iterrows():
@@ -586,8 +590,23 @@ def main():
                 print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 日期范围无重叠，跳过")
                 continue
             
-            # 构建文件名并检查是否已存在
-            filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
+            # 尝试从合约代码中提取年月信息，用于文件名前缀以确保按年月排序
+            year_month_prefix = ""
+            try:
+                # 提取点号前的部分，然后取最后4位作为年月信息
+                code_part = contract_code.split('.')[0]
+                if len(code_part) >= 4:
+                    year_month_str = code_part[-4:]
+                    if year_month_str.isdigit():
+                        year_month_prefix = year_month_str
+            except Exception:
+                pass
+            
+            # 构建文件名并检查是否已存在（添加年月前缀确保按年月排序）
+            if year_month_prefix:
+                filename = f"{year_month_prefix}_{contract_code}_{contract_start}_{contract_end}.csv"
+            else:
+                filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
             filepath = os.path.join(contracts_dir, filename)
             
             if os.path.exists(filepath):
@@ -635,10 +654,13 @@ def main():
                         break
             
             # Properly handle contract_data in various cases
+            download_succeeded = False  # 跟踪下载是否成功（包括重试）
+            
             if contract_data is not None and not (isinstance(contract_data, int) and contract_data == -1):
                 # Ensure contract_data is a DataFrame and not empty
                 if hasattr(contract_data, 'empty') and not contract_data.empty:
                     successful_downloads += 1
+                    download_succeeded = True
                     print(f"  ✓ 下载成功，共{len(contract_data)}条记录")
                 else:
                     print(f"  ✗ 下载失败：未获取到有效数据")
@@ -648,9 +670,13 @@ def main():
                     if retry_data is not None and not (isinstance(retry_data, int) and retry_data == -1):
                         if hasattr(retry_data, 'empty') and not retry_data.empty:
                             successful_downloads += 1
+                            download_succeeded = True
                             print(f"  ✓ 重试成功，共{len(retry_data)}条记录")
                         else:
                             print(f"  ✗ 重试也失败：未获取到有效数据")
+                            failed_downloads += 1  # 重试失败，计入失败
+                    else:
+                        failed_downloads += 1  # 未重试或重试遇到限制错误，计入失败
             else:
                 print(f"  ✗ 下载失败")
                 # 处理下载失败情况
@@ -659,15 +685,19 @@ def main():
                 if retry_data is not None and not (isinstance(retry_data, int) and retry_data == -1):
                     if hasattr(retry_data, 'empty') and not retry_data.empty:
                         successful_downloads += 1
+                        download_succeeded = True
                         print(f"  ✓ 重试成功，共{len(retry_data)}条记录")
                     else:
                         print(f"  ✗ 重试也失败：未获取到有效数据")
+                        failed_downloads += 1  # 重试失败，计入失败
+                else:
+                    failed_downloads += 1  # 未重试或重试遇到限制错误，计入失败
         
         # 打印汇总信息
         print(f"\n联动模式下载完成！")
         print(f"- 总合约数: {total_contracts}")
         print(f"- 成功下载: {successful_downloads}")
-        print(f"- 失败数量: {total_contracts - successful_downloads}")
+        print(f"- 失败数量: {failed_downloads}")  # 使用实际失败计数，而不是总合约数减成功数
 
 
 if __name__ == "__main__":
