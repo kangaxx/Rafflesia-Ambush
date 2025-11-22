@@ -41,7 +41,7 @@ def initialize_tushare(token):
         print(f"错误：Tushare接口初始化失败 - {str(e)}")
         return None
 
-def _download_rb_future_contracts(pro, save_dir=None):
+def _download_rb_future_contracts(pro, save_dir=None, fut_code='RB', fut_type='1'):
     """
     私有方法：下载螺纹钢期货全部合约的基本信息
     
@@ -56,10 +56,10 @@ def _download_rb_future_contracts(pro, save_dir=None):
         # 使用fut_basic接口获取螺纹钢期货合约信息
         # 螺纹钢的产品代码是RB
         df = pro.fut_basic(
-            exchange='SHF',  # 上海期货交易所
-            fut_type='1',    # 1: 期货
-            fields='ts_code,symbol,name,exchange,list_date,delist_date,status',
-            name='RB.SHF' 
+            exchange='SHFE',  # 上海期货交易所
+            fut_type=fut_type,    # 1: 普通合约， 2：主力合约和连续合约
+            fields='ts_code,symbol,name,exchange,list_date,delist_date',
+            fut_code=fut_code  # 螺纹钢期货代码 (RB)
         )
         
         if df.empty:
@@ -71,8 +71,8 @@ def _download_rb_future_contracts(pro, save_dir=None):
         # 保存数据到CSV文件
         if save_dir:
             # 构建保存文件路径
-            filename = "rb_future_contracts_info.csv"
-            filepath = os.path.join(save_dir, filename)
+            filename = "future_contracts_info.csv"
+            filepath = os.path.join(save_dir, fut_code + "_" + fut_type + "_" + filename)
             
             # 保存数据
             df.to_csv(filepath, index=False, encoding='utf-8-sig')
