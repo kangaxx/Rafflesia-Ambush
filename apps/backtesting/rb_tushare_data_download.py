@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import argparse
 import re
+import time
 
 def get_tushare_token():
     """
@@ -99,6 +100,8 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
     
     返回：
     DataFrame: 下载的数据
+    None: 普通错误
+    -1: 接口调用频率限制错误
     """
     try:
         # 下载期货日线数据
@@ -134,7 +137,26 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
         
         return df
     except Exception as e:
-        print(f"错误：下载 {symbol} 数据失败 - {str(e)}")
+        error_msg = str(e)
+        print(f"错误：下载 {symbol} 数据失败 - {error_msg}")
+        
+        # 检查是否是接口调用频率限制错误
+        # 匹配"每分钟最多访问该接口X次"的模式
+        if "每分钟最多访问该接口" in error_msg and "次" in error_msg:
+            # 提取限制次数（如果有）
+            import re
+            match = re.search(r'每分钟最多访问该接口(\d+)次', error_msg)
+            if match:
+                limit_count = match.group(1)
+                if limit_count == '0':
+                    print(f"⚠️ 警告：触发tushare接口频率限制，每分钟最多访问{limit_count}次！")
+                    print(f"⚠️ 您的账户可能被禁用或权限受限，请检查您的tushare账户状态！")
+                else:
+                    print(f"触发tushare接口频率限制，每分钟最多访问{limit_count}次")
+            else:
+                print("触发tushare接口频率限制")
+            return -1  # 返回特殊标记表示遇到接口频率限制错误
+        
         return None
 
 def validate_date_format(date_str):
@@ -355,6 +377,38 @@ def main():
             
             # 下载单个合约数据
             contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
+            
+            # 检查是否遇到接口调用频率限制错误
+            if contract_data == -1:
+                # 再次检查错误信息，确认是否是限制次数为0的情况
+                try:
+                    # 尝试一个简单的调用以获取最新错误信息
+                    test_df = pro.fut_basic(exchange='SHFE', fut_type='1', fields='ts_code', fut_code='RB', limit=1)
+                    # 如果成功获取数据，说明不是限制为0的情况
+                    print("遇到tushare接口频率限制，等待60秒后重试...")
+                    # 等待60秒
+                    for i in range(60, 0, -1):
+                        print(f"剩余等待时间: {i}秒", end='\r')
+                        time.sleep(1)
+                    print()  # 换行
+                    
+                    # 重新尝试下载当前合约
+                    print(f"重新尝试下载 {contract_code} ({contract_name}) 的数据...")
+                    contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
+                except Exception as e_test:
+                    error_test_msg = str(e_test)
+                    # 检查是否包含限制为0次的信息
+                    match_test = re.search(r'每分钟最多访问该接口(\d+)次', error_test_msg)
+                    if match_test and match_test.group(1) == '0':
+                        print(f"⚠️ 严重警告：您的tushare账户每分钟访问次数限制为0次！")
+                        print(f"⚠️ 这表明您的账户可能已被禁用或权限受限！")
+                        print(f"⚠️ 建议您：")
+                        print(f"⚠️ 1. 检查您的tushare账户状态和会员等级")
+                        print(f"⚠️ 2. 确认您的账户是否欠费")
+                        print(f"⚠️ 3. 联系tushare客服了解详细情况")
+                        print("\n由于账户受限，下载任务已终止。")
+                        # 提前结束循环
+                        break
             
             if contract_data is not None:
                 successful_downloads += 1
