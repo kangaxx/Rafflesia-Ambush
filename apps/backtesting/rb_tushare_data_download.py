@@ -610,7 +610,6 @@ def main():
                 'filepath': filepath,
                 'file_exists': file_exists
             })
-            print(contracts_to_download)
             # 打印合约信息
             status = "文件已存在" if file_exists else "将下载"
             print(f"[{idx+1}] {contract_code} ({contract_name}) - {status}")
