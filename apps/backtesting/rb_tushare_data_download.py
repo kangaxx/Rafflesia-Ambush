@@ -520,7 +520,7 @@ def main():
             contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
             
             # 检查是否遇到接口调用频率限制错误
-            if contract_data == -1:
+            if isinstance(contract_data, int) and contract_data == -1:
                 # 再次检查错误信息，确认是否是限制次数为0的情况
                 try:
                     # 尝试一个简单的调用以获取最新错误信息
