@@ -155,7 +155,8 @@ def main():
         description='下载期货数据工具',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""使用示例：
-  # 使用默认参数下载螺纹钢期货数据
+  # 使用示例：
+  # 使用默认参数下载螺纹钢期货数据（模式1）
   python rb_tushare_data_download.py
   
   # 使用长选项指定参数下载螺纹钢期货数据
@@ -163,6 +164,15 @@ def main():
   
   # 使用短选项指定参数下载螺纹钢期货数据（更简洁）
   python rb_tushare_data_download.py -s RB.SHF -b 20230101 -e 20231231
+  
+  # 指定数据保存目录
+  python rb_tushare_data_download.py -s RB.SHF -o D:\data\futures
+  
+  # 使用联动模式下载所有合约数据（模式2）
+  python rb_tushare_data_download.py -s RB.SHF -m 2
+  
+  # 使用联动模式下载所有合约数据，并指定日期范围
+  python rb_tushare_data_download.py -s RB.SHF -m 2 -b 20230101 -e 20231231
   
   # 下载其他期货品种数据（例如铜期货，使用SHF作为交易所标识）
   python rb_tushare_data_download.py -s CU.SHF -b 20230601 -e 20230930
@@ -180,6 +190,8 @@ def main():
     parser.add_argument('-b', '--start_date', type=str, default='20130101', help='开始日期，必须为YYYYMMDD格式，例如: 20230101')
     parser.add_argument('-e', '--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，必须为YYYYMMDD格式，例如: 20231231')
     parser.add_argument('-f', '--fut_code', type=str, default=None, help='期货品种代码标识，用于查询合约信息（可选，默认会从symbol中自动提取），例如: RB')
+    parser.add_argument('-o', '--output_dir', type=str, default=None, help='数据保存目录路径（可选，默认保存在脚本所在目录的data文件夹）')
+    parser.add_argument('-m', '--work_mode', type=int, default=1, choices=[1, 2], help='运行模式：1-下载指定单个期货数据（默认），2-联动模式（下载所有合约数据）')
     
     # 解析参数
     args = parser.parse_args()
@@ -239,7 +251,14 @@ def main():
         return
     
     # 设置保存目录
-    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    if args.output_dir:
+        save_dir = args.output_dir
+    else:
+        save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    
+    # 确保保存目录存在
+    os.makedirs(save_dir, exist_ok=True)
+    print(f"数据将保存到: {save_dir}")
     
     # 下载期货合约基本信息
     print(f"\n开始下载{args.fut_code}期货合约基本信息...")
@@ -257,19 +276,84 @@ def main():
     
     # 打印使用的参数信息
     print(f"\n使用的下载参数:")
+    print(f"- 运行模式: {args.work_mode} (1-单个期货数据，2-所有合约数据)")
     print(f"- 期货代码: {future_symbol}")
     print(f"- 期货品种代码标识: {args.fut_code}")
     print(f"- 开始日期: {start_date}")
     print(f"- 结束日期: {end_date}")
+    print(f"- 数据保存目录: {save_dir}")
     
-    # 下载期货数据
-    print("\n开始下载期货数据...")
-    future_data = download_future_data(pro, future_symbol, start_date, end_date, save_dir)
-    
-    # 打印数据样例
-    if future_data is not None:
-        print("\n期货数据样例:")
-        print(future_data.head())
+    # 根据工作模式执行不同的下载逻辑
+    if args.work_mode == 1:
+        # 模式1：下载指定单个期货数据
+        print("\n开始下载期货数据...")
+        future_data = download_future_data(pro, future_symbol, start_date, end_date, save_dir)
+        
+        # 打印数据样例
+        if future_data is not None:
+            print("\n期货数据样例:")
+            print(future_data.head())
+    else:
+        # 模式2：联动模式，下载所有合约数据
+        print(f"\n开始联动模式下载...")
+        
+        # 确保已获取合约信息
+        if contracts_data is None:
+            print("错误：未获取到合约信息，无法进行联动模式下载")
+            return
+        
+        print(f"将下载{len(contracts_data)}个合约的数据")
+        
+        # 创建合约数据专用目录
+        contracts_dir = os.path.join(save_dir, f"{args.fut_code}_contracts")
+        os.makedirs(contracts_dir, exist_ok=True)
+        print(f"合约数据将保存到: {contracts_dir}")
+        
+        # 统计信息
+        total_contracts = len(contracts_data)
+        successful_downloads = 0
+        
+        # 逐个下载合约数据
+        for idx, contract in contracts_data.iterrows():
+            contract_code = contract['ts_code']
+            contract_name = contract['name']
+            list_date = contract['list_date']
+            delist_date = contract['delist_date']
+            
+            # 使用合约的上市日期和退市日期，但受限于用户指定的日期范围
+            contract_start = max(list_date, start_date)
+            contract_end = min(delist_date, end_date)
+            
+            # 检查是否有重叠的日期范围
+            if contract_start > contract_end:
+                print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 日期范围无重叠，跳过")
+                continue
+            
+            # 构建文件名并检查是否已存在
+            filename = f"{contract_code}_{contract_start}_{contract_end}.csv"
+            filepath = os.path.join(contracts_dir, filename)
+            
+            if os.path.exists(filepath):
+                print(f"[{idx+1}/{total_contracts}] {contract_code} ({contract_name}): 文件已存在，跳过")
+                continue
+            
+            print(f"[{idx+1}/{total_contracts}] 开始下载 {contract_code} ({contract_name}) 的数据...")
+            print(f"  时间范围: {contract_start} 至 {contract_end}")
+            
+            # 下载单个合约数据
+            contract_data = download_future_data(pro, contract_code, contract_start, contract_end, contracts_dir)
+            
+            if contract_data is not None:
+                successful_downloads += 1
+                print(f"  ✓ 下载成功，共{len(contract_data)}条记录")
+            else:
+                print(f"  ✗ 下载失败")
+        
+        # 打印汇总信息
+        print(f"\n联动模式下载完成！")
+        print(f"- 总合约数: {total_contracts}")
+        print(f"- 成功下载: {successful_downloads}")
+        print(f"- 失败数量: {total_contracts - successful_downloads}")
 
 
 if __name__ == "__main__":
