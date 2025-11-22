@@ -158,19 +158,28 @@ def main():
   # 使用默认参数下载螺纹钢期货数据
   python rb_tushare_data_download.py
   
-  # 指定参数下载螺纹钢期货数据
-  python rb_tushare_data_download.py --symbol RB.SHF --start_date 20230101 --end_date 20231231 --fut_code RB
+  # 使用长选项指定参数下载螺纹钢期货数据
+  python rb_tushare_data_download.py --symbol RB.SHF --start_date 20230101 --end_date 20231231
   
-  # 下载其他期货品种数据（例如铜期货）
-  python rb_tushare_data_download.py --symbol CU.SHF --start_date 20230601 --end_date 20230930 --fut_code CU
+  # 使用短选项指定参数下载螺纹钢期货数据（更简洁）
+  python rb_tushare_data_download.py -s RB.SHF -b 20230101 -e 20231231
+  
+  # 下载其他期货品种数据（例如铜期货，使用SHF作为交易所标识）
+  python rb_tushare_data_download.py -s CU.SHF -b 20230601 -e 20230930
+  
+  # 手动指定fut_code参数（通常不需要，会自动从symbol中提取）
+  python rb_tushare_data_download.py -s RB.SHF -f RB
+  
+  # 有效交易所标识：SHFE/SHF（上海期货交易所）、DCE（大连商品交易所）、CZCE（郑州商品交易所）
+  # CFFEX（中国金融期货交易所）、INE（上海国际能源交易中心）
         """
     )
     
-    # 添加参数
-    parser.add_argument('--symbol', type=str, default='RB.SHF', help='期货代码，格式为"品种.交易所"，例如: RB.SHF')
-    parser.add_argument('--start_date', type=str, default='20130101', help='开始日期，必须为YYYYMMDD格式，例如: 20230101')
-    parser.add_argument('--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，必须为YYYYMMDD格式，例如: 20231231')
-    parser.add_argument('--fut_code', type=str, default='RB', help='期货品种代码标识，用于查询合约信息，例如: RB')
+    # 添加参数（同时支持长选项和短选项）
+    parser.add_argument('-s', '--symbol', type=str, default='RB.SHF', help='期货代码，格式为"品种.交易所"，例如: RB.SHF')
+    parser.add_argument('-b', '--start_date', type=str, default='20130101', help='开始日期，必须为YYYYMMDD格式，例如: 20230101')
+    parser.add_argument('-e', '--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，必须为YYYYMMDD格式，例如: 20231231')
+    parser.add_argument('-f', '--fut_code', type=str, default=None, help='期货品种代码标识，用于查询合约信息（可选，默认会从symbol中自动提取），例如: RB')
     
     # 解析参数
     args = parser.parse_args()
@@ -199,12 +208,21 @@ def main():
         parser.error(f'期货代码格式错误: {args.symbol}。正确格式为"品种.交易所"，例如: RB.SHF')
     
     # 验证交易所标识（常见的期货交易所）
-    valid_exchanges = ['SHFE', 'DCE', 'CZCE', 'CFFEX', 'INE']
+    valid_exchanges = ['SHFE', 'SHF', 'DCE', 'CZCE', 'CFFEX', 'INE']
     exchange = args.symbol.split('.')[-1].upper()
     if exchange not in valid_exchanges:
         parser.error(f'无效的交易所标识: {exchange}。有效的交易所为: {', '.join(valid_exchanges)}')
     
-    # 验证fut_code不为空
+    # 自动从symbol中提取fut_code（如果未指定）
+    if args.fut_code is None or args.fut_code.strip() == '':
+        # 从symbol中提取期货品种代码
+        if '.' in args.symbol:
+            args.fut_code = args.symbol.split('.')[0]
+            print(f"从symbol自动提取fut_code: {args.fut_code}")
+        else:
+            parser.error(f'期货代码格式错误: {args.symbol}。正确格式为"品种.交易所"，例如: RB.SHF')
+    
+    # 确保fut_code不为空
     if not args.fut_code or args.fut_code.strip() == '':
         parser.error('期货品种代码标识(fut_code)不能为空')
     
