@@ -3,6 +3,7 @@ import json
 import tushare as ts
 import pandas as pd
 from datetime import datetime
+import argparse
 
 def get_tushare_token():
     """
@@ -43,30 +44,31 @@ def initialize_tushare(token):
 
 def _download_rb_future_contracts(pro, save_dir=None, fut_code='RB', fut_type='1'):
     """
-    私有方法：下载螺纹钢期货全部合约的基本信息
+    私有方法：下载指定期货品种全部合约的基本信息
     
     参数：
     pro: tushare pro_api实例
     save_dir: 保存数据的目录，默认为None（不保存）
+    fut_code: 期货品种代码标识，默认: 'RB'
+    fut_type: 合约类型，1:普通合约，2:主力合约和连续合约，默认: '1'
     
     返回：
-    DataFrame: 螺纹钢期货合约信息
+    DataFrame: 期货合约信息
     """
     try:
-        # 使用fut_basic接口获取螺纹钢期货合约信息
-        # 螺纹钢的产品代码是RB
+        # 使用fut_basic接口获取期货合约信息
         df = pro.fut_basic(
             exchange='SHFE',  # 上海期货交易所
             fut_type=fut_type,    # 1: 普通合约， 2：主力合约和连续合约
             fields='ts_code,symbol,name,exchange,list_date,delist_date',
-            fut_code=fut_code  # 螺纹钢期货代码 (RB)
+            fut_code=fut_code  # 期货品种代码
         )
         
         if df.empty:
-            print("警告：未获取到螺纹钢期货合约信息")
+            print(f"警告：未获取到{fut_code}期货合约信息")
             return None
         
-        print(f"成功下载螺纹钢期货合约信息，共 {len(df)} 条记录")
+        print(f"成功下载{fut_code}期货合约信息，共 {len(df)} 条记录")
         
         # 保存数据到CSV文件
         if save_dir:
@@ -76,11 +78,11 @@ def _download_rb_future_contracts(pro, save_dir=None, fut_code='RB', fut_type='1
             
             # 保存数据
             df.to_csv(filepath, index=False, encoding='utf-8-sig')
-            print(f"螺纹钢期货合约信息已保存至 {filepath}")
+            print(f"{fut_code}期货合约信息已保存至 {filepath}")
         
         return df
     except Exception as e:
-        print(f"错误：下载螺纹钢期货合约信息失败 - {str(e)}")
+        print(f"错误：下载{fut_code}期货合约信息失败 - {str(e)}")
         return None
 
 def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
@@ -135,6 +137,18 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
         return None
 
 def main():
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description='下载螺纹钢期货数据')
+    
+    # 添加参数
+    parser.add_argument('--symbol', type=str, default='RB.SHF', help='期货代码，默认: RB.SHF')
+    parser.add_argument('--start_date', type=str, default='20130101', help='开始日期，格式: YYYYMMDD，默认: 20130101')
+    parser.add_argument('--end_date', type=str, default=datetime.now().strftime("%Y%m%d"), help='结束日期，格式: YYYYMMDD，默认: 当前日期')
+    parser.add_argument('--fut_code', type=str, default='RB', help='期货品种代码标识，默认: RB')
+    
+    # 解析参数
+    args = parser.parse_args()
+    
     # 获取tushare token
     token = get_tushare_token()
     if not token:
@@ -150,20 +164,26 @@ def main():
     # 设置保存目录
     save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
     
-    # 下载螺纹钢期货合约基本信息
-    print("\n开始下载螺纹钢期货合约基本信息...")
-    contracts_data = _download_rb_future_contracts(pro, save_dir)
+    # 下载期货合约基本信息
+    print(f"\n开始下载{args.fut_code}期货合约基本信息...")
+    contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
     
     # 打印合约信息样例
     if contracts_data is not None:
-        print("\n螺纹钢期货合约信息样例:")
+        print(f"\n{args.fut_code}期货合约信息样例:")
         print(contracts_data.head())
     
-    # 设置下载参数
-    # 示例：下载螺纹钢期货数据
-    future_symbol = "RB.SHF"  # 螺纹钢期货
-    start_date = "20230101"
-    end_date = datetime.now().strftime("%Y%m%d")  # 使用当前日期作为结束日期
+    # 使用命令行参数
+    future_symbol = args.symbol
+    start_date = args.start_date
+    end_date = args.end_date
+    
+    # 打印使用的参数信息
+    print(f"\n使用的下载参数:")
+    print(f"- 期货代码: {future_symbol}")
+    print(f"- 期货品种代码标识: {args.fut_code}")
+    print(f"- 开始日期: {start_date}")
+    print(f"- 结束日期: {end_date}")
     
     # 下载期货数据
     print("\n开始下载期货数据...")
