@@ -6,6 +6,66 @@ from datetime import datetime
 import argparse
 import re
 import time
+import numpy as np
+
+def sort_contracts_by_date(contracts_df):
+    """
+    对期货合约数据按照年月进行排序，将不符合产品代码+YY+MM格式的数据放在最后
+    
+    参数:
+    contracts_df: 包含期货合约信息的DataFrame
+    
+    返回:
+    DataFrame: 排序后的合约数据
+    """
+    if contracts_df is None or contracts_df.empty:
+        return contracts_df
+    
+    # 创建临时列用于排序
+    # 符合格式的合约将有正常的年月值，不符合的将有一个很大的值确保排在最后
+    temp_sort_keys = []
+    
+    for idx, row in contracts_df.iterrows():
+        ts_code = row.get('ts_code', '')
+        if not isinstance(ts_code, str):
+            # 非字符串类型，放在最后
+            temp_sort_keys.append((9999, 13))
+            continue
+        
+        # 尝试从代码中提取年份和月份信息 (格式: 产品代码+YY+MM)
+        # 假设ts_code格式类似 RB2401.SHF
+        try:
+            # 提取点号前的部分，然后取最后4位
+            code_part = ts_code.split('.')[0]
+            if len(code_part) >= 4:
+                # 尝试提取最后4位作为年月信息
+                year_month_str = code_part[-4:]
+                if year_month_str.isdigit():
+                    # 提取年份和月份
+                    year = int(year_month_str[:2])
+                    month = int(year_month_str[2:])
+                    # 验证月份范围
+                    if 1 <= month <= 12:
+                        temp_sort_keys.append((year, month))
+                        continue
+        except Exception:
+            pass
+        
+        # 不符合格式，放在最后
+        temp_sort_keys.append((9999, 13))
+    
+    # 添加排序键到DataFrame
+    contracts_df['_sort_year'] = [key[0] for key in temp_sort_keys]
+    contracts_df['_sort_month'] = [key[1] for key in temp_sort_keys]
+    
+    # 按年月排序
+    sorted_df = contracts_df.sort_values(by=['_sort_year', '_sort_month'])
+    
+    # 删除临时排序列
+    sorted_df = sorted_df.drop(['_sort_year', '_sort_month'], axis=1)
+    
+    print(f"合约数据已按年月排序，共{len(sorted_df)}条记录")
+    return sorted_df
 
 def get_tushare_token():
     """
@@ -297,6 +357,8 @@ def main():
             try:
                 # 尝试读取文件
                 saved_contracts_data = pd.read_csv(contracts_file_path)
+                # 读取数据后立即调用排序函数
+                saved_contracts_data = sort_contracts_by_date(saved_contracts_data)
                 total_records = len(saved_contracts_data)
                 
                 print(f"\n发现已存在的期货合约列表文件: {contracts_file_path}")
@@ -349,14 +411,24 @@ def main():
                 print("将重新调用接口获取合约信息...")
                 print(f"\n开始下载{args.fut_code}期货合约基本信息...")
                 contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+            finally:
+                # 对合约数据进行排序
+                if 'contracts_data' in locals() and contracts_data is not None:
+                    contracts_data = sort_contracts_by_date(contracts_data)
         else:
             # 文件不存在，调用接口获取
             print(f"\n开始下载{args.fut_code}期货合约基本信息...")
             contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+            # 对合约数据进行排序
+            if contracts_data is not None:
+                contracts_data = sort_contracts_by_date(contracts_data)
     else:
         # 非模式2，直接调用接口
         print(f"\n开始下载{args.fut_code}期货合约基本信息...")
         contracts_data = _download_rb_future_contracts(pro, save_dir, fut_code=args.fut_code)
+        # 对合约数据进行排序
+        if contracts_data is not None:
+            contracts_data = sort_contracts_by_date(contracts_data)
     
     # 打印合约信息样例
     if contracts_data is not None:
