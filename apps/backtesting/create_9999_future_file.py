@@ -45,11 +45,19 @@ def validate_directory(directory: str) -> bool:
 def load_contract_list(contract_list_file: str) -> List[str]:
     """
     加载期货合约列表
+    从合约列表文件的第二列读取合约编号+YY+MM格式的数据
     """
     contracts = []
     try:
         with open(contract_list_file, 'r', encoding='utf-8') as f:
-            contracts = [line.strip() for line in f if line.strip()]
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    # 分割行，获取第二列数据（合约编号+YY+MM格式）
+                    parts = line.split(',')
+                    if len(parts) >= 2:
+                        contract_code = parts[1].strip()
+                        contracts.append(contract_code)
         logger.info(f"成功加载合约列表，共 {len(contracts)} 个合约")
         return contracts
     except Exception as e:
