@@ -8,6 +8,66 @@ import re
 import time
 import numpy as np
 
+def _find_and_sort_daily_data_files(directory):
+    """
+    私有函数：从日线数据文件路径内，搜索全部符合命名规范的日线数据文件，
+    将文件名添加到一个列表内，按照文件名中的YYMM排序，最后打印
+    
+    参数：
+    directory: 日线数据文件所在目录
+    
+    返回：
+    list: 排序后的文件名列表
+    """
+    # 检查目录是否存在
+    if not os.path.isdir(directory):
+        print(f"错误：目录 {directory} 不存在")
+        return []
+    
+    # 存储符合规范的文件名和排序键
+    valid_files_with_keys = []
+    
+    # 遍历目录中的所有文件
+    for filename in os.listdir(directory):
+        # 只处理CSV文件
+        if not filename.endswith('.csv'):
+            continue
+        
+        # 移除.csv后缀
+        name_without_ext = filename[:-4]
+        
+        # 尝试提取YYMM部分（假设文件名格式为：产品代码+YY+MM）
+        # 例如：RB2401.csv -> RB2401 -> 提取最后4位作为YYMM
+        if len(name_without_ext) >= 4:
+            potential_year_month = name_without_ext[-4:]
+            if potential_year_month.isdigit():
+                # 提取年份和月份
+                try:
+                    year = int(potential_year_month[:2])
+                    month = int(potential_year_month[2:])
+                    # 验证月份范围
+                    if 1 <= month <= 12:
+                        # 将文件名和排序键添加到列表
+                        valid_files_with_keys.append((filename, year, month))
+                except Exception:
+                    pass
+    
+    # 按年份和月份排序
+    valid_files_with_keys.sort(key=lambda x: (x[1], x[2]))
+    
+    # 提取排序后的文件名列表
+    sorted_filenames = [item[0] for item in valid_files_with_keys]
+    
+    # 打印排序后的文件列表
+    print(f"在目录 {directory} 中找到 {len(sorted_filenames)} 个符合命名规范的日线数据文件：")
+    if sorted_filenames:
+        for i, filename in enumerate(sorted_filenames, 1):
+            print(f"{i:3d}. {filename}")
+    else:
+        print("没有找到符合命名规范的日线数据文件")
+    
+    return sorted_filenames
+
 def handle_download_failure(pro, contract_code, contract_name, contract_start, contract_end, save_dir, auto_wait_mode_ref):
     """
     处理下载失败的情况
@@ -498,6 +558,8 @@ def main():
                 # 对合约数据进行排序
                 if 'contracts_data' in locals() and contracts_data is not None:
                     contracts_data = sort_contracts_by_date(contracts_data)
+                # 调用函数搜索并排序日线数据文件
+                _find_and_sort_daily_data_files(save_dir)
         else:
             # 文件不存在，调用接口获取
             print(f"\n开始下载{args.fut_code}期货合约基本信息...")
@@ -505,6 +567,8 @@ def main():
             # 对合约数据进行排序
             if contracts_data is not None:
                 contracts_data = sort_contracts_by_date(contracts_data)
+            # 调用函数搜索并排序日线数据文件
+            _find_and_sort_daily_data_files(save_dir)
     else:
         # 非模式2，直接调用接口
         print(f"\n开始下载{args.fut_code}期货合约基本信息...")
@@ -512,6 +576,8 @@ def main():
         # 对合约数据进行排序
         if contracts_data is not None:
             contracts_data = sort_contracts_by_date(contracts_data)
+        # 调用函数搜索并排序日线数据文件
+        _find_and_sort_daily_data_files(save_dir)
     
     # 打印合约信息样例
     if contracts_data is not None:
@@ -537,6 +603,8 @@ def main():
         # 模式1：下载指定单个期货数据
         print("\n开始下载期货数据...")
         future_data = download_future_data(pro, future_symbol, start_date, end_date, save_dir)
+        # 调用函数搜索并排序日线数据文件
+        _find_and_sort_daily_data_files(save_dir)
         
         # 打印数据样例
         if future_data is not None:
