@@ -3,6 +3,7 @@ import pandas as pd
 import argparse
 from datetime import datetime
 import logging
+import re
 from typing import Dict, List, Tuple, Optional
 
 # 配置日志
@@ -120,14 +121,20 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     """
     获取目录下所有合约的文件路径
     K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
+    仅匹配符合格式规范的文件，避免将合约列表文件等非合约数据文件误判
     """
     contract_files = {}
+    # 定义正则表达式模式，匹配 期货代码 + YY + MM + .csv 或 期货代码 + YY + DD + .csv 格式
+    # 这里使用更精确的匹配，确保期货代码后面跟着4位数字
+    pattern = re.compile(f'^{re.escape(future_code)}\d{{4}}\.csv$')
+    
     for filename in os.listdir(directory):
-        if filename.endswith('.csv') and future_code in filename:
-            # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv"）
+        # 使用正则表达式严格匹配文件名格式
+        if pattern.match(filename):
+            # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv" 或 "期货编号 + YY + DD.csv"）
             contract_code = filename.split('.')[0]
             contract_files[contract_code] = os.path.join(directory, filename)
-    logger.info(f"找到 {len(contract_files)} 个合约文件")
+    logger.info(f"找到 {len(contract_files)} 个符合格式规范的合约文件")
     return contract_files
 
 def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
@@ -179,19 +186,16 @@ def find_yydd_contract_files(directory: str, future_code: str) -> List[str]:
     """
     yydd_contracts = []
     
+    # 定义正则表达式模式，匹配 期货代码 + YY + DD + .csv 格式
+    # 严格匹配以确保只有符合规范的文件被识别
+    pattern = re.compile(f'^{re.escape(future_code)}\d{{4}}\.csv$')
+    
     for filename in os.listdir(directory):
-        if filename.endswith('.csv') and future_code in filename:
+        # 使用正则表达式严格匹配文件名格式
+        if pattern.match(filename):
             # 从文件名中提取合约代码（不包括扩展名）
             contract_code = filename.split('.')[0]
-            
-            # 检查文件名格式是否符合 "期货编号 + YY + DD"
-            # 假设期货代码后面跟着4位数字（YY + DD）
-            # 这里使用正则表达式检查格式
-            if len(contract_code) >= len(future_code) + 4:
-                # 提取最后4位作为YY + DD部分
-                date_part = contract_code[-4:]
-                if date_part.isdigit():
-                    yydd_contracts.append(contract_code)
+            yydd_contracts.append(contract_code)
     
     # 按YY + DD排序
     yydd_contracts.sort(key=lambda x: x[-4:])
