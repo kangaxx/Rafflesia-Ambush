@@ -45,20 +45,50 @@ def validate_directory(directory: str) -> bool:
 def load_contract_list(contract_list_file: str) -> List[str]:
     """
     加载期货合约列表
-    从合约列表文件的第二列读取合约编号+YY+MM格式的数据
+    识别CSV文件的表头，从symbol列读取合约名称
     """
     contracts = []
     try:
         with open(contract_list_file, 'r', encoding='utf-8') as f:
-            for line in f:
+            lines = f.readlines()
+            if not lines:
+                logger.error("合约列表文件为空")
+                return []
+            
+            # 处理第一行作为表头
+            header = lines[0].strip().split(',')
+            symbol_index = -1
+            for i, col_name in enumerate(header):
+                if col_name.strip().lower() == 'symbol':
+                    symbol_index = i
+                    break
+            
+            if symbol_index == -1:
+                logger.error("在表头中未找到symbol列")
+                return []
+            
+            # 读取数据行
+            for line in lines[1:]:
                 line = line.strip()
                 if line and not line.startswith('#'):
-                    # 分割行，获取第二列数据（合约编号+YY+MM格式）
                     parts = line.split(',')
-                    if len(parts) >= 2:
-                        contract_code = parts[1].strip()
-                        contracts.append(contract_code)
+                    if len(parts) > symbol_index:
+                        contract_code = parts[symbol_index].strip()
+                        if contract_code:
+                            contracts.append(contract_code)
+        
         logger.info(f"成功加载合约列表，共 {len(contracts)} 个合约")
+        
+        # 打印合约列表，每行8条
+        if contracts:
+            logger.info("合约名称列表:")
+            for i in range(0, len(contracts), 8):
+                # 取当前8个合约
+                batch = contracts[i:i+8]
+                # 格式化并打印，确保对齐
+                formatted_line = "  ".join([f"{contract:<10}" for contract in batch])
+                logger.info(formatted_line)
+        
         return contracts
     except Exception as e:
         logger.error(f"加载合约列表失败: {str(e)}")
