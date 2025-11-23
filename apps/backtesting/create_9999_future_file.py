@@ -24,10 +24,10 @@ def parse_arguments() -> argparse.Namespace:
                         help='结果文件输出路径（默认: ./data/out）')
     parser.add_argument('-f', '--future_code', required=True,
                         help='期货品类代码（如 rb、cu 等）')
-    parser.add_argument('-d', '--date_format', default='%Y-%m-%d',
-                        help='日期格式，默认为 %%Y-%%m-%%d')
-    parser.add_argument('-l', '--Delivery', type=lambda x: x.lower() == 'true', default=True,
-                        help='是否允许交割月合约作为主力合约，输入true或false，默认为true')
+    parser.add_argument('-d', '--date_format', default='YYYYMMDD',
+                        help='日期格式，默认为 YYYYMMDD')
+    parser.add_argument('-l', '--Delivery', type=lambda x: x.lower() == 'true', default=False,
+                        help='是否允许交割月合约作为主力合约，输入true或false，默认为false')
     return parser.parse_args()
 
 def validate_directory(directory: str) -> bool:
