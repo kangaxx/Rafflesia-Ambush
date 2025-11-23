@@ -431,8 +431,7 @@ def determine_main_contract_by_volume(date: pd.Timestamp, contract_files: Dict[s
             max_volume = volume
             main_contract = contract_code
     
-    logger.debug(f"[determine_main_contract_by_volume] 处理完成 - 考虑合约数: {considered_contracts}, 跳过合约数: {skipped_contracts}, 
-              选定主力合约: {main_contract}, 最大交易量: {max_volume}")
+    logger.debug(f"[determine_main_contract_by_volume] 处理完成 - 考虑合约数: {considered_contracts}, 跳过合约数: {skipped_contracts}, 选定主力合约: {main_contract}, 最大交易量: {max_volume}")
     
     return main_contract, max_volume
 
@@ -623,6 +622,10 @@ def build_main_contract_kline(main_contract_mapping: pd.DataFrame,
         # 添加进度信息
         if (idx + 1) % 10 == 0 or idx == len(main_contract_mapping) - 1:
             logger.debug(f"[build_main_contract_kline] 进度: {idx+1}/{len(main_contract_mapping)} - 成功: {successful_records}, 失败: {failed_records}")
+    
+    # 记录构建完成的统计信息
+    logger.debug(f"[build_main_contract_kline] 构建完成 - 总记录数: {len(main_contract_mapping)}, 成功添加: {successful_records}, 失败: {failed_records}")
+    logger.debug(f"[build_main_contract_kline] 失败原因统计: 缺失文件: {missing_files}, 加载失败: {failed_records - missing_files}")
     
     # 合并所有数据
     if main_contract_data:
