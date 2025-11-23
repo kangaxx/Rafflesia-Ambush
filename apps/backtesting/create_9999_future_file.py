@@ -119,7 +119,7 @@ def load_kline_data(file_path: str) -> Optional[pd.DataFrame]:
 def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     """
     获取目录下所有合约的文件路径
-    支持文件格式：期货编号 + YY + MM + .csv
+    K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
     """
     contract_files = {}
     for filename in os.listdir(directory):
@@ -133,6 +133,7 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
 def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
     """
     收集所有合约的日期，获取完整的日期范围
+    K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
     通过从合约文件名中提取YY + MM，使用排序的方法来获取日期
     """
     all_dates = []
@@ -168,7 +169,8 @@ def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
 def is_delivery_month_contract(contract_code: str, date: pd.Timestamp) -> bool:
     """
     判断合约是否处于交割月
-    假设合约代码格式为：期货品种+年份+月份，如rb2310表示2023年10月交割的螺纹钢合约
+    K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
+    合约代码格式为：期货品种+年份(后两位)+月份，如rb2310表示2023年10月交割的螺纹钢合约
     """
     try:
         # 提取合约中的年份和月份信息
