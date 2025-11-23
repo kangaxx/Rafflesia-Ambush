@@ -266,8 +266,10 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
             # 确保保存目录存在
             os.makedirs(save_dir, exist_ok=True)
             
-            # 简化文件名，只使用合约代码+.csv格式
-            filename = f"{symbol}.csv"
+            # 简化文件名，只使用合约代码(不含交易所).csv格式
+            # 从symbol中提取合约代码部分（去掉交易所标识）
+            contract_code = symbol.split('.')[0]
+            filename = f"{contract_code}.csv"
             filepath = os.path.join(save_dir, filename)
             
             # 保存数据
