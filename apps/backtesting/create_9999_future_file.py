@@ -46,6 +46,7 @@ def load_contract_list(contract_list_file: str) -> List[str]:
     """
     加载期货合约列表
     识别CSV文件的表头，从symbol列读取合约名称
+    只校验合约文件的名称和数量，不进行日期比较
     """
     contracts = []
     try:
@@ -67,7 +68,7 @@ def load_contract_list(contract_list_file: str) -> List[str]:
                 logger.error("在表头中未找到symbol列")
                 return []
             
-            # 读取数据行
+            # 读取数据行 - 只提取合约名称，不处理日期列
             for line in lines[1:]:
                 line = line.strip()
                 if line and not line.startswith('#'):
@@ -345,7 +346,8 @@ def main():
         
         # 仅当合约列表有效时进行数据校验
         if validate_data:
-            # 验证合约文件是否完整
+            logger.info("开始校验合约文件完整性（只校验合约名称和数量匹配，不进行日期比较）...")
+            # 验证合约文件是否完整 - 只检查合约名称和数量是否匹配
             missing_in_volume = set(contract_list) - set(volume_files.keys())
             missing_in_kline = set(contract_list) - set(kline_files.keys())
             
