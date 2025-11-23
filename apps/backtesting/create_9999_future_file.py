@@ -469,6 +469,10 @@ def create_main_contract_series(all_dates: pd.DatetimeIndex,
         valid_contracts = 0
         skipped_delivery = 0
         
+        # 打印所有可用合约及其交易量
+        print(f"日期 {date} 的可用合约及交易量:")
+        found_any_valid = False
+        
         for contract_code, file_path in volume_files.items():
             # 检查是否为交割月合约
             is_delivery = not allow_delivery_month and is_delivery_month_contract(contract_code, date)
@@ -499,7 +503,14 @@ def create_main_contract_series(all_dates: pd.DatetimeIndex,
             volume = date_data['volume'].iloc[0]
             contract_volumes.append((contract_code, volume))
             valid_contracts += 1
+            # 打印合约名称和交易量
+            print(f"{contract_code}: {volume}")
+            found_any_valid = True
             logger.debug(f"合约 {contract_code}: 交易量 = {volume}")
+        
+        # 如果没有找到任何有效合约，打印提示信息
+        if not found_any_valid:
+            print(f"日期 {date}: 未找到可用合约")
         
         # 记录当日合约统计信息
         logger.debug(f"日期 {date}: 有效合约数 = {valid_contracts}, 跳过交割月合约数 = {skipped_delivery}")
