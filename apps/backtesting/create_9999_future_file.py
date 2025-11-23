@@ -428,15 +428,79 @@ def create_main_contract_series(all_dates: pd.DatetimeIndex,
     switch_records = []
     previous_main_contract = None
     
+    logger.debug(f"开始创建主力合约序列，共 {len(all_dates)} 个日期需要处理")
+    logger.debug(f"可用交易量合约数量: {len(volume_files)}")
+    logger.debug(f"交割月合约允许设置: {allow_delivery_month}")
+    
     for i, date in enumerate(all_dates):
-        # 使用volume_files中的交易量数据确定主力合约
-        main_contract, volume = determine_main_contract_by_volume(date, volume_files, allow_delivery_month)
+        # 添加进度信息
+        if i % 10 == 0 or i == len(all_dates) - 1:
+            logger.debug(f"处理进度: {i+1}/{len(all_dates)} ({(i+1)/len(all_dates)*100:.1f}%) - 正在处理日期: {date}")
+        
+        logger.debug(f"=== 处理日期: {date} ===")
+        
+        # 收集当天所有合约的交易量信息
+        contract_volumes = []
+        valid_contracts = 0
+        skipped_delivery = 0
+        
+        for contract_code, file_path in volume_files.items():
+            # 检查是否为交割月合约
+            is_delivery = not allow_delivery_month and is_delivery_month_contract(contract_code, date)
+            if is_delivery:
+                skipped_delivery += 1
+                logger.debug(f"跳过交割月合约: {contract_code}")
+                continue
+            
+            df = load_kline_data(contract_code, volume_files)
+            if df is None:
+                logger.debug(f"无法加载合约数据: {contract_code}")
+                continue
+            
+            if 'trade_date' not in df.columns:
+                logger.debug(f"合约 {contract_code} 数据中缺少 trade_date 列")
+                continue
+            
+            # 查找该日期的数据
+            date_data = df[df['trade_date'] == date]
+            if date_data.empty:
+                logger.debug(f"合约 {contract_code} 在日期 {date} 无数据")
+                continue
+            
+            if 'volume' not in date_data.columns:
+                logger.debug(f"合约 {contract_code} 数据中缺少 volume 列")
+                continue
+            
+            volume = date_data['volume'].iloc[0]
+            contract_volumes.append((contract_code, volume))
+            valid_contracts += 1
+            logger.debug(f"合约 {contract_code}: 交易量 = {volume}")
+        
+        # 记录当日合约统计信息
+        logger.debug(f"日期 {date}: 有效合约数 = {valid_contracts}, 跳过交割月合约数 = {skipped_delivery}")
+        
+        # 确定主力合约
+        main_contract = None
+        max_volume = 0
+        
+        if contract_volumes:
+            # 按交易量降序排序
+            contract_volumes.sort(key=lambda x: x[1], reverse=True)
+            
+            # 记录排序后的合约交易量
+            logger.debug(f"日期 {date} 合约交易量排序:")
+            for idx, (code, vol) in enumerate(contract_volumes[:3]):  # 只显示前3名
+                logger.debug(f"  第{idx+1}名: {code} = {vol}")
+            
+            # 选择交易量最大的合约
+            main_contract, max_volume = contract_volumes[0]
+            logger.debug(f"选择主力合约: {main_contract}, 交易量: {max_volume}")
         
         if main_contract:
             main_contract_mapping.append({
                 'trade_date': date,
                 'main_contract': main_contract,
-                'volume': volume
+                'volume': max_volume
             })
             
             # 记录主力合约切换
@@ -448,12 +512,42 @@ def create_main_contract_series(all_dates: pd.DatetimeIndex,
                     'switch_index': i
                 })
                 logger.info(f"主力合约切换: {previous_main_contract} -> {main_contract} (日期: {date})")
+                logger.debug(f"切换详情: 前主力合约交易量: {_get_contract_volume(previous_main_contract, date, volume_files)}, 
+                          新主力合约交易量: {max_volume}, 
+                          交易量差额: {max_volume - _get_contract_volume(previous_main_contract, date, volume_files)}")
+            else:
+                logger.debug(f"主力合约未变化: {main_contract}")
             
             previous_main_contract = main_contract
         else:
             logger.warning(f"无法确定 {date} 的主力合约")
+            logger.debug(f"无法确定主力合约的原因: 有效合约数 = {valid_contracts}, 合约交易量数据 = {contract_volumes}")
     
+    logger.debug(f"主力合约序列创建完成，共 {len(main_contract_mapping)} 条记录，{len(switch_records)} 次切换")
     return pd.DataFrame(main_contract_mapping), switch_records
+
+def _get_contract_volume(contract_code: str, date: pd.Timestamp, volume_files: Dict[str, str]) -> float:
+    """
+    获取指定合约在指定日期的交易量
+    
+    Args:
+        contract_code: 合约代码
+        date: 交易日期
+        volume_files: 交易量合约文件映射
+        
+    Returns:
+        交易量，如果获取失败则返回0
+    """
+    try:
+        if contract_code in volume_files:
+            df = load_kline_data(contract_code, volume_files)
+            if df is not None and 'trade_date' in df.columns and 'volume' in df.columns:
+                date_data = df[df['trade_date'] == date]
+                if not date_data.empty:
+                    return date_data['volume'].iloc[0]
+    except Exception as e:
+        logger.debug(f"获取合约 {contract_code} 在 {date} 的交易量失败: {str(e)}")
+    return 0
 
 def build_main_contract_kline(main_contract_mapping: pd.DataFrame, 
                             contract_files: Dict[str, str],
