@@ -43,6 +43,89 @@ def validate_directory(directory: str) -> bool:
         return False
     return True
 
+def _sort_files_by_yymm(contracts: List[str]) -> List[str]:
+    """
+    私有函数：按YYMM时间信息对合约列表进行排序
+    
+    Args:
+        contracts: 合约名称列表，合约名称格式必须是code + YY + MM
+        
+    Returns:
+        排序后的合约名称列表，按时间从早到晚排序
+    """
+    # 验证输入参数
+    if not isinstance(contracts, list):
+        logger.error("输入参数必须是列表类型")
+        return []
+    
+    # 定义验证和提取YYMM的函数
+    def extract_and_validate(contract):
+        # 检查是否为字符串
+        if not isinstance(contract, str):
+            logger.warning(f"合约名称必须是字符串类型: {contract}")
+            return None
+        
+        # 检查长度至少为6（code至少1位 + YY2位 + MM2位）
+        if len(contract) < 4:
+            logger.warning(f"合约名称长度不足，无法提取YYMM信息: {contract}")
+            return None
+        
+        # 提取最后4位作为YYMM
+        yymm_part = contract[-4:]
+        
+        # 验证YYMM部分是否为数字
+        if not yymm_part.isdigit():
+            logger.warning(f"合约名称的YYMM部分不是有效数字: {contract}")
+            return None
+        
+        # 提取年份和月份
+        yy = int(yymm_part[:2])
+        mm = int(yymm_part[2:])
+        
+        # 验证月份范围
+        if not (1 <= mm <= 12):
+            logger.warning(f"合约名称的月份部分无效（必须在1-12之间）: {contract}")
+            return None
+        
+        # 返回完整年份（假设21世纪）、月份和原始合约名称
+        return (2000 + yy, mm, contract)
+    
+    # 提取有效合约并验证
+    valid_contracts = []
+    for contract in contracts:
+        result = extract_and_validate(contract)
+        if result:
+            valid_contracts.append(result)
+    
+    # 按年份和月份排序
+    valid_contracts.sort(key=lambda x: (x[0], x[1]))
+    
+    # 返回排序后的合约名称列表
+    return [contract for _, _, contract in valid_contracts]
+
+# 提供公共接口，兼容字典类型输入
+def sort_files_by_yymm(files: List[str] or Dict[str, str]) -> List[str] or Dict[str, str]:
+    """
+    按YYMM时间信息对合约文件进行排序
+    
+    Args:
+        files: 可以是合约名称列表或合约名称到文件路径的字典
+        
+    Returns:
+        排序后的合约列表或保持键值对的排序后的字典
+    """
+    if isinstance(files, dict):
+        # 对字典的键进行排序
+        sorted_keys = _sort_files_by_yymm(list(files.keys()))
+        # 创建排序后的字典
+        return {key: files[key] for key in sorted_keys}
+    elif isinstance(files, list):
+        # 对列表进行排序
+        return _sort_files_by_yymm(files)
+    else:
+        logger.error(f"输入参数类型不支持: {type(files)}")
+        return files
+
 def load_contract_list(contract_list_file: str) -> List[str]:
     """
     加载期货合约列表
@@ -567,6 +650,9 @@ def main():
                 all_dates = collect_dates_from_validated_files(validated_contracts)
                 logger.info(f"共收集到 {len(all_dates)} 个日期")
         
+        # kline_files 还有volume_files 都需要按照YYMM日期重新排序
+        kline_files = sort_files_by_yymm(kline_files)
+        volume_files = sort_files_by_yymm(volume_files)
         # 创建主力合约序列前的调试信息
         logger.info("======= 主力合约创建调试信息 =======")
         logger.info(f"开始确定主力合约...")
