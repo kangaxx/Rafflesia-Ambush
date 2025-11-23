@@ -80,11 +80,12 @@ def load_kline_data(file_path: str) -> Optional[pd.DataFrame]:
 def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     """
     获取目录下所有合约的文件路径
+    支持文件格式：期货编号 + YY + MM + .csv
     """
     contract_files = {}
     for filename in os.listdir(directory):
         if filename.endswith('.csv') and future_code in filename:
-            # 从文件名中提取合约代码（假设文件名格式为 "合约代码.csv"）
+            # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv"）
             contract_code = filename.split('.')[0]
             contract_files[contract_code] = os.path.join(directory, filename)
     logger.info(f"找到 {len(contract_files)} 个合约文件")
