@@ -134,7 +134,18 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
             # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv" 或 "期货编号 + YY + DD.csv"）
             contract_code = filename.split('.')[0]
             contract_files[contract_code] = os.path.join(directory, filename)
+    
+    # 打印符合规范的合约文件总数和全部文件名
     logger.info(f"找到 {len(contract_files)} 个符合格式规范的合约文件")
+    if contract_files:
+        logger.info("符合规范的合约文件名列表:")
+        # 对文件名进行排序，便于查看
+        sorted_filenames = sorted(f"{code}.csv" for code in contract_files.keys())
+        # 每行打印5个文件名，确保格式美观
+        for i in range(0, len(sorted_filenames), 5):
+            batch = sorted_filenames[i:i+5]
+            logger.info("  " + "  ".join(batch))
+    
     return contract_files
 
 def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
