@@ -13,7 +13,7 @@ def parse_arguments() -> argparse.Namespace:
     """
     解析命令行参数
     """
-    parser = argparse.ArgumentParser(description='生成期货历史主力合约数据文件')
+    parser = argparse.ArgumentParser(description='生成期货历史主力合约数据文件\n使用范例: python create_9999_future_file.py -f RB -c data/RB_1_future_contracts_info.csv')
     parser.add_argument('-v', '--volume_data_dir', required=False, default='./data',
                         help='普通合约日线数据文件集所在路径（用于获取交易量判断主力合约，默认: ./data）')
     parser.add_argument('-k', '--kline_data_dir', required=False,
@@ -313,9 +313,13 @@ def main():
             
             if missing_in_volume or missing_in_kline:
                 if missing_in_volume:
-                    logger.error(f"交易量数据中缺少合约: {', '.join(missing_in_volume)}")
+                    logger.error("交易量数据中缺少合约:")
+                    for contract in missing_in_volume:
+                        logger.error(f"  {contract}")
                 if missing_in_kline:
-                    logger.error(f"K线数据中缺少合约: {', '.join(missing_in_kline)}")
+                    logger.error("K线数据中缺少合约:")
+                    for contract in missing_in_kline:
+                        logger.error(f"  {contract}")
                 logger.error("数据文件校验失败，缺少必要的合约文件，程序中断")
                 return
         else:
