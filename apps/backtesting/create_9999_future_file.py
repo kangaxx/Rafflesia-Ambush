@@ -133,13 +133,37 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
 def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
     """
     收集所有合约的日期，获取完整的日期范围
+    通过从合约文件名中提取YY + MM，使用排序的方法来获取日期
     """
-    all_dates = pd.DatetimeIndex([])
-    for contract_code, file_path in contract_files.items():
-        df = load_kline_data(file_path)
-        if df is not None and 'trade_date' in df.columns:
-            all_dates = all_dates.union(df['trade_date'])
-    return all_dates.sort_values()
+    all_dates = []
+    
+    for contract_code in contract_files.keys():
+        try:
+            # 从合约代码中提取年份和月份信息 (假设格式为: 期货编号 + YY + MM)
+            # 提取最后4位字符作为年份和月份
+            if len(contract_code) >= 4:
+                yymm_part = contract_code[-4:]
+                if yymm_part.isdigit():
+                    # 转换为年份和月份
+                    year = 2000 + int(yymm_part[:2])  # 假设是21世纪的年份
+                    month = int(yymm_part[2:])
+                    
+                    # 验证月份是否有效
+                    if 1 <= month <= 12:
+                        # 创建该月份的第一天作为日期代表
+                        date_str = f"{year}-{month:02d}-01"
+                        date = pd.to_datetime(date_str)
+                        all_dates.append(date)
+        except Exception as e:
+            logger.warning(f"从合约代码 {contract_code} 提取日期失败: {str(e)}")
+    
+    # 去重并排序
+    if all_dates:
+        unique_dates = list(set(all_dates))
+        unique_dates.sort()
+        return pd.DatetimeIndex(unique_dates)
+    else:
+        return pd.DatetimeIndex([])
 
 def is_delivery_month_contract(contract_code: str, date: pd.Timestamp) -> bool:
     """
