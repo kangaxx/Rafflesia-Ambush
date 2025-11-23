@@ -165,6 +165,83 @@ def collect_all_dates(contract_files: Dict[str, str]) -> pd.DatetimeIndex:
         return pd.DatetimeIndex(unique_dates)
     else:
         return pd.DatetimeIndex([])
+        
+def find_yydd_contract_files(directory: str, future_code: str) -> List[str]:
+    """
+    查找符合格式"期货编号 + YY + DD + .csv"的合约文件
+    
+    参数:
+        directory: 要搜索的目录路径
+        future_code: 期货品种代码
+    
+    返回:
+        符合格式的合约文件名列表
+    """
+    yydd_contracts = []
+    
+    for filename in os.listdir(directory):
+        if filename.endswith('.csv') and future_code in filename:
+            # 从文件名中提取合约代码（不包括扩展名）
+            contract_code = filename.split('.')[0]
+            
+            # 检查文件名格式是否符合 "期货编号 + YY + DD"
+            # 假设期货代码后面跟着4位数字（YY + DD）
+            # 这里使用正则表达式检查格式
+            if len(contract_code) >= len(future_code) + 4:
+                # 提取最后4位作为YY + DD部分
+                date_part = contract_code[-4:]
+                if date_part.isdigit():
+                    yydd_contracts.append(contract_code)
+    
+    # 按YY + DD排序
+    yydd_contracts.sort(key=lambda x: x[-4:])
+    
+    logger.info(f"找到 {len(yydd_contracts)} 个符合'期货编号 + YY + DD + .csv'格式的文件")
+    return yydd_contracts
+
+def collect_dates_from_validated_files(validated_contracts: List[str]) -> pd.DatetimeIndex:
+    """
+    从校验通过的合约文件名中提取日期信息
+    K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
+    按年月排序获取日期信息
+    
+    参数:
+        validated_contracts: 校验通过的合约文件名列表
+    
+    返回:
+        按年月排序的日期索引
+    """
+    all_dates = []
+    
+    for contract_code in validated_contracts:
+        try:
+            # 从合约代码中提取年份和月份信息
+            if len(contract_code) >= 4:
+                yymm_part = contract_code[-4:]
+                if yymm_part.isdigit():
+                    # 转换为年份和月份
+                    year = 2000 + int(yymm_part[:2])  # 假设是21世纪的年份
+                    month = int(yymm_part[2:])
+                    
+                    # 验证月份是否有效
+                    if 1 <= month <= 12:
+                        # 创建该月份的第一天作为日期代表
+                        date_str = f"{year}-{month:02d}-01"
+                        date = pd.to_datetime(date_str)
+                        all_dates.append(date)
+        except Exception as e:
+            logger.warning(f"从校验通过的合约代码 {contract_code} 提取日期失败: {str(e)}")
+    
+    # 去重并按年月排序
+    if all_dates:
+        unique_dates = list(set(all_dates))
+        # 按年月排序
+        unique_dates.sort(key=lambda x: (x.year, x.month))
+        logger.info(f"从校验通过的合约文件中提取并排序了 {len(unique_dates)} 个月份日期")
+        return pd.DatetimeIndex(unique_dates)
+    else:
+        logger.warning("未能从校验通过的合约文件中提取到有效日期信息")
+        return pd.DatetimeIndex([])
 
 def is_delivery_month_contract(contract_code: str, date: pd.Timestamp) -> bool:
     """
@@ -388,13 +465,74 @@ def main():
                         logger.error(f"  {contract}")
                 logger.error("数据文件校验失败，缺少必要的合约文件，程序中断")
                 return
+            else:
+                # 校验成功，记录校验通过的合约文件名
+                validated_contracts = list(volume_files.keys())
+                logger.info(f"数据文件校验成功！共 {len(validated_contracts)} 个合约文件通过校验")
         else:
             logger.info("由于未提供有效的合约列表，将不对数据文件进行完整性校验")
+            # 未进行校验时，使用volume_files中的所有合约
+            validated_contracts = list(volume_files.keys())
         
         # 收集所有日期
-        logger.info("收集所有日期数据...")
-        all_dates = collect_all_dates(kline_files)
-        logger.info(f"共收集到 {len(all_dates)} 个交易日")
+        logger.info("收集主力合约日期信息...")
+        
+        if validate_data:
+            # 如果进行了数据校验，使用校验通过的合约文件名作为数据源
+            all_dates = collect_dates_from_validated_files(validated_contracts)
+            logger.info(f"共收集到 {len(all_dates)} 个月份日期")
+        else:
+            # 如果未进行数据校验，查找符合"期货编号 + YY + DD + .csv"格式的文件
+            logger.info(f"从期货日线文件路径 {args.volume_data_dir} 查找符合'期货编号 + YY + DD + .csv'格式的文件...")
+            yydd_contracts = find_yydd_contract_files(args.volume_data_dir, args.future_code)
+            
+            # 打印文件列表
+            if yydd_contracts:
+                logger.info("找到的符合格式的文件列表:")
+                # 每行打印5个文件名，以便查看
+                for i in range(0, len(yydd_contracts), 5):
+                    batch = yydd_contracts[i:i+5]
+                    formatted_line = "  ".join([f"{contract:<10}" for contract in batch])
+                    logger.info(formatted_line)
+                
+                # 从YYDD格式的合约文件名中提取日期
+                all_dates = []
+                for contract_code in yydd_contracts:
+                    try:
+                        # 提取最后4位作为YY + DD部分
+                        yydd_part = contract_code[-4:]
+                        if yydd_part.isdigit():
+                            # 转换为年份和日期
+                            year = 2000 + int(yydd_part[:2])  # 假设是21世纪的年份
+                            day = int(yydd_part[2:])
+                            
+                            # 验证日期是否有效
+                            if 1 <= day <= 31:
+                                # 创建日期，月份假设为1月（这里可能需要根据实际情况调整）
+                                # 注意：由于只有年份和日期信息，这里使用固定月份可能不准确
+                                # 更好的做法是将YYDD作为一个整体排序键
+                                date_str = f"{year}-01-{day:02d}"
+                                date = pd.to_datetime(date_str)
+                                all_dates.append(date)
+                    except Exception as e:
+                        logger.warning(f"从合约代码 {contract_code} 提取日期失败: {str(e)}")
+                
+                # 去重并排序
+                if all_dates:
+                    unique_dates = list(set(all_dates))
+                    unique_dates.sort()
+                    all_dates = pd.DatetimeIndex(unique_dates)
+                    logger.info(f"从YYDD格式文件中提取并排序了 {len(all_dates)} 个日期")
+                else:
+                    # 如果从YYDD格式文件中无法提取日期，则回退到使用原来的方法
+                    logger.warning("无法从YYDD格式文件中提取有效日期，尝试使用原方法...")
+                    all_dates = collect_dates_from_validated_files(validated_contracts)
+                    logger.info(f"共收集到 {len(all_dates)} 个日期")
+            else:
+                # 如果没有找到符合YYDD格式的文件，使用原来的方法
+                logger.warning("未找到符合'期货编号 + YY + DD + .csv'格式的文件，尝试使用原方法...")
+                all_dates = collect_dates_from_validated_files(validated_contracts)
+                logger.info(f"共收集到 {len(all_dates)} 个日期")
         
         # 创建主力合约序列
         logger.info("开始确定主力合约...")
