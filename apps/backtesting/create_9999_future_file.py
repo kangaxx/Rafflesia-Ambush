@@ -96,11 +96,27 @@ def load_contract_list(contract_list_file: str) -> List[str]:
         logger.error(f"加载合约列表失败: {str(e)}")
         return []
 
-def load_kline_data(file_path: str) -> Optional[pd.DataFrame]:
+def load_kline_data(contract_code: str, contract_files: Dict[str, str]) -> Optional[pd.DataFrame]:
     """
     加载K线数据文件
+    从get_all_contract_files返回的合约文件列表中获取数据
+    
+    参数:
+        contract_code: 合约代码
+        contract_files: 合约文件字典，由get_all_contract_files函数返回
+    
+    返回:
+        加载的K线数据DataFrame，如果加载失败则返回None
     """
     try:
+        # 检查合约代码是否在合约文件列表中
+        if contract_code not in contract_files:
+            logger.warning(f"合约代码 {contract_code} 不在合约文件列表中")
+            return None
+        
+        # 从合约文件列表中获取文件路径
+        file_path = contract_files[contract_code]
+        
         df = pd.read_csv(file_path)
         # 确保日期列存在并转换为日期类型
         if 'trade_date' in df.columns:
@@ -114,7 +130,7 @@ def load_kline_data(file_path: str) -> Optional[pd.DataFrame]:
             return None
         return df
     except Exception as e:
-        logger.error(f"加载K线数据文件 {file_path} 失败: {str(e)}")
+        logger.error(f"加载K线数据文件失败: 合约代码 {contract_code}, 文件路径 {contract_files.get(contract_code, '未知')}, 错误: {str(e)}")
         return None
 
 def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
@@ -297,7 +313,7 @@ def determine_main_contract_by_volume(date: pd.Timestamp, contract_files: Dict[s
         if not allow_delivery_month and is_delivery_month_contract(contract_code, date):
             continue
             
-        df = load_kline_data(file_path)
+        df = load_kline_data(contract_code, contract_files)
         if df is None or 'trade_date' not in df.columns:
             continue
         
@@ -369,7 +385,7 @@ def build_main_contract_kline(main_contract_mapping: pd.DataFrame,
         contract_code = row['main_contract']
         
         if contract_code in contract_files:
-            df = load_kline_data(contract_files[contract_code])
+            df = load_kline_data(contract_code, contract_files)
             if df is not None:
                 # 查找该日期的K线数据
                 date_data = df[df['trade_date'] == date].copy()
@@ -495,6 +511,8 @@ def main():
         if validate_data:
             # 如果进行了数据校验，使用校验通过的合约文件名作为数据源
             all_dates = collect_dates_from_validated_files(validated_contracts)
+            # 打印收集到的日期范围
+            logger.info(f"收集到的日期范围: {all_dates.min().strftime('%Y-%m-%d')} 至 {all_dates.max().strftime('%Y-%m-%d')}")
             logger.info(f"共收集到 {len(all_dates)} 个月份日期")
         else:
             # 如果未进行数据校验，查找符合"期货编号 + YY + DD + .csv"格式的文件
@@ -549,9 +567,25 @@ def main():
                 all_dates = collect_dates_from_validated_files(validated_contracts)
                 logger.info(f"共收集到 {len(all_dates)} 个日期")
         
-        # 创建主力合约序列
-        logger.info("开始确定主力合约...")
+        # 创建主力合约序列前的调试信息
+        logger.info("======= 主力合约创建调试信息 =======")
+        logger.info(f"开始确定主力合约...")
         logger.info(f"交割月合约处理设置: {'允许交割月合约作为主力合约' if args.Delivery else '不允许交割月合约作为主力合约'}")
+        logger.info(f"可用日期范围: {all_dates.min().strftime('%Y-%m-%d')} 至 {all_dates.max().strftime('%Y-%m-%d')}")
+        logger.info(f"日期总数: {len(all_dates)}")
+        logger.info(f"K线合约文件数量: {len(kline_files)}")
+        logger.info(f"交易量合约文件数量: {len(volume_files)}")
+        if kline_files:
+            logger.info(f"前5个K线合约文件示例: {list(kline_files.keys())[:5]}")
+        if volume_files:
+            logger.info(f"前5个交易量合约文件示例: {list(volume_files.keys())[:5]}")
+        logger.info("===================================")
+        # 添加一个互动步骤，确认用户是否继续
+        user_input = input("确认继续生成主力合约吗？(y/n): ")
+        if user_input.lower() != 'y':
+            logger.info("用户取消操作")
+            return
+        # 创建主力合约序列
         main_contract_mapping, switch_records = create_main_contract_series(
             all_dates, contract_files=kline_files, volume_files=volume_files, allow_delivery_month=args.Delivery
         )
