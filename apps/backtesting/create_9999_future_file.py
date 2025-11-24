@@ -228,6 +228,8 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     pattern = re.compile(f'^{re.escape(future_code)}\\d{{4}}\\.csv$')
     
     for filename in os.listdir(directory):
+        # 打印调试信息 filename
+        logger.debug(f"get_all_contract_files 检查文件: {filename}")
         # 使用正则表达式严格匹配文件名格式
         if pattern.match(filename):
             # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv" 或 "期货编号 + YY + DD.csv"）
