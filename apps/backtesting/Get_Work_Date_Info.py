@@ -137,7 +137,7 @@ def main():
     # 创建参数解析器
     parser = argparse.ArgumentParser(
         description='获取交易所日期信息并支持保存到文件',
-        epilog='示例:\n  python Get_Work_Date_Info.py -x SHFE -f ./shfe_open_day.csv  # 将上海期货交易所交易日历保存到shfe_open_day.csv'
+        epilog='示例:\n  python Get_Work_Date_Info.py -x SHFE  # 使用默认文件名SHFE_open_day.csv保存\n  python Get_Work_Date_Info.py -x SHFE -f custom_file.csv  # 使用自定义文件名保存'
     )
     
     # 添加命令行参数
@@ -146,7 +146,7 @@ def main():
     parser.add_argument('--end_date', '-e', type=str, default=None, 
                         help='结束日期，格式: YYYYMMDD，默认: 当前系统日期')
     parser.add_argument('--save_file', '-f', type=str, default=None, 
-                        help='保存交易日历的文件路径')
+                        help='保存交易日历的文件路径，默认: 交易所代码_open_day.csv')
     parser.add_argument('--exchange', '-x', type=str, default='SHFE', 
                         help='交易所代码，默认: SHFE (上海期货交易所)')
     
@@ -157,6 +157,11 @@ def main():
     if args.end_date is None:
         args.end_date = datetime.datetime.now().strftime('%Y%m%d')
         logger.info(f"未提供结束日期，使用系统当前日期: {args.end_date}")
+    
+    # 如果未提供保存文件路径，使用默认格式：交易所代码_open_day.csv
+    if args.save_file is None:
+        args.save_file = f"./{args.exchange}_open_day.csv"
+        logger.info(f"未提供保存文件路径，使用默认文件名: {args.save_file}")
     
     logger.info(f"命令行参数: 开始日期={args.start_date}, 结束日期={args.end_date}, ")
     logger.info(f"          交易所={args.exchange}, 保存文件={args.save_file}")
@@ -197,11 +202,10 @@ def main():
                     print(f"- 最早交易日: {date_list[0]}")
                     print(f"- 最晚交易日: {date_list[-1]}")
                 
-                # 如果指定了保存文件
-                if args.save_file:
-                    success = write_exchange_dates_to_file(date_list, args.save_file)
-                    if success:
-                        print(f"\n成功将交易日历保存至: {args.save_file}")
+                # 保存文件
+                success = write_exchange_dates_to_file(date_list, args.save_file)
+                if success:
+                    print(f"\n成功将交易日历保存至: {args.save_file}")
             except Exception as e:
                 logger.error(f"获取 {exchange_code} 数据失败: {e}")
         else:
