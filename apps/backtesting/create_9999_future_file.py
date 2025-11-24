@@ -593,7 +593,7 @@ def build_main_contract_kline(main_contract_mapping: pd.DataFrame,
     logger.debug(f"[build_main_contract_kline] 开始构建主力合约K线数据，映射记录数: {len(main_contract_mapping)}, 合约文件数: {len(contract_files)}")
     
     main_contract_data = []
-    successful_records = 0
+    successful_records = 0  
     failed_records = 0
     missing_files = 0
     
