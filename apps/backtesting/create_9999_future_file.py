@@ -228,13 +228,13 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     pattern = re.compile(f'^{re.escape(future_code)}\d{{4}}\.csv$')
     
     for filename in os.listdir(directory):
-        # 打印调试信息 filename
-        logger.debug(f"get_all_contract_files 检查文件: {filename}")
         # 使用正则表达式严格匹配文件名格式
         if pattern.match(filename):
             # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv" 或 "期货编号 + YY + DD.csv"）
             contract_code = filename.split('.')[0]
             contract_files[contract_code] = os.path.join(directory, filename)
+            # 打印调试信息 合约代码 文件名
+            logger.debug(f"get_all_contract_files 找到合约: {contract_code}, 文件路径: {contract_files[contract_code]}")
     
     # 打印符合规范的合约文件总数和全部文件名
     logger.info(f"找到 {len(contract_files)} 个符合格式规范的合约文件")
@@ -242,7 +242,7 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
         logger.info("符合规范的合约文件名列表:")
         # 对文件名进行排序，便于查看
         sorted_filenames = sorted(f"{code}.csv" for code in contract_files.keys())
-        # 每行打印5个文件名，确保格式美观
+        # 每行打印5个文件名，确保格式美观 
         for i in range(0, len(sorted_filenames), 5):
             batch = sorted_filenames[i:i+5]
             logger.info("  " + "  ".join(batch))
