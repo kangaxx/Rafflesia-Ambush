@@ -222,6 +222,9 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     K线数据文件的文件名规范是：期货代码 + YY + MM + .csv
     仅匹配符合格式规范的文件，避免将合约列表文件等非合约数据文件误判
     """
+    # 打印进入函数的提示
+    logger.info(f"get_all_contract_files 开始扫描目录: {directory}")
+
     contract_files = {}
     # 定义正则表达式模式，匹配 期货代码 + YY + MM + .csv 或 期货代码 + YY + DD + .csv 格式
     # 这里使用更精确的匹配，确保期货代码后面跟着4位数字
