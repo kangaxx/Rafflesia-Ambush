@@ -225,7 +225,7 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     contract_files = {}
     # 定义正则表达式模式，匹配 期货代码 + YY + MM + .csv 或 期货代码 + YY + DD + .csv 格式
     # 这里使用更精确的匹配，确保期货代码后面跟着4位数字
-    pattern = re.compile(f'^{re.escape(future_code)}\d{{4}}\.csv$')
+    pattern = re.compile(f'^{re.escape(future_code)}\\d{{4}}\\.csv$')
     
     for filename in os.listdir(directory):
         # 使用正则表达式严格匹配文件名格式
@@ -300,7 +300,7 @@ def find_yydd_contract_files(directory: str, future_code: str) -> List[str]:
     
     # 定义正则表达式模式，匹配 期货代码 + YY + DD + .csv 格式
     # 严格匹配以确保只有符合规范的文件被识别
-    pattern = re.compile(f'^{re.escape(future_code)}\d{{4}}\.csv$')
+    pattern = re.compile(f'^{re.escape(future_code)}\\d{{4}}\\.csv$')
     
     for filename in os.listdir(directory):
         # 使用正则表达式严格匹配文件名格式
