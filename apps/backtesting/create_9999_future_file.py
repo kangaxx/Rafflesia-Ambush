@@ -232,14 +232,14 @@ def get_all_contract_files(directory: str, future_code: str) -> Dict[str, str]:
     
     for filename in os.listdir(directory):
         # 打印调试信息 filename
-        logger.debug(f"get_all_contract_files 检查文件: {filename}")
+        logger.info(f"get_all_contract_files 检查文件: {filename}")
         # 使用正则表达式严格匹配文件名格式
         if pattern.match(filename):
             # 从文件名中提取合约代码（文件名格式为 "期货编号 + YY + MM.csv" 或 "期货编号 + YY + DD.csv"）
             contract_code = filename.split('.')[0]
             contract_files[contract_code] = os.path.join(directory, filename)
             # 打印调试信息 合约代码 文件名
-            logger.debug(f"get_all_contract_files 找到合约: {contract_code}, 文件路径: {contract_files[contract_code]}")
+            logger.info(f"get_all_contract_files 找到合约: {contract_code}, 文件路径: {contract_files[contract_code]}")
     
     # 打印符合规范的合约文件总数和全部文件名
     logger.info(f"找到 {len(contract_files)} 个符合格式规范的合约文件")
