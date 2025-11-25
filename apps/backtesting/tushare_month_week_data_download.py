@@ -26,8 +26,12 @@ def download_data(ts_code, start_date, end_date, output, token, freq):
     if df.empty:
         print(f"未获取到 {ts_code} 的{ '月度' if freq == 'month' else '周度' }数据。")
     else:
+        output_dir = os.path.dirname(os.path.abspath(output))
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
         df.to_csv(output, index=False, encoding="utf-8-sig")
-        print(f"{ts_code} { '月度' if freq == 'month' else '周度' }数据已保存到 {output}")
+        print(f"{ts_code} {'月度' if freq == 'month' else '周度'}数据已保存到 {output}")
+
 
 def main():
     parser = argparse.ArgumentParser(
