@@ -43,6 +43,163 @@ def validate_directory(directory: str) -> bool:
         return False
     return True
 
+def _process_contract_sequence(contract_files: List[str], date_column: str = 'trade_date', amount_column: str = 'amount', oi_column: str = 'oi', fut_code_column: str = 'fut_code') -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    私有函数：按照时间顺序处理多份期货合约数据，实现主力合约切换
+    
+    功能：
+    1. 按照时间顺序读取合约数据
+    2. 创建df_copy存储当前主力合约数据
+    3. 创建df_switch_record记录合约切换情况
+    4. 当新合约amount和oi都大于当前合约时进行切换
+    5. 处理所有合约数据
+    
+    Args:
+        contract_files: 按时间顺序排列的合约文件路径列表
+        date_column: 日期列名，默认'trade_date'
+        amount_column: 成交额列名，默认'amount'
+        oi_column: 持仓量列名，默认'oi'
+        fut_code_column: 合约代码列名，默认'fut_code'
+    
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]: 
+        - 第一元素是处理后的主力合约数据
+        - 第二元素是合约切换记录
+    """
+    if not contract_files:
+        logger.error("合约文件列表为空")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # 读取第一份合约数据
+    first_contract_file = contract_files[0]
+    try:
+        df_first = pd.read_csv(first_contract_file)
+        if date_column not in df_first.columns:
+            logger.error(f"第一份合约数据中缺少日期列 '{date_column}'")
+            return pd.DataFrame(), pd.DataFrame()
+        
+        # 创建df_copy作为当前主力合约数据
+        df_copy = df_first.copy()
+        
+        # 获取当前合约代码（从文件名中提取）
+        first_contract_code = os.path.basename(first_contract_file).split('.')[0]
+        
+        # 创建df_switch_record，包含日期和fut_code字段
+        df_switch_record = pd.DataFrame({
+            date_column: df_copy[date_column],
+            fut_code_column: first_contract_code
+        })
+        
+        logger.info(f"成功读取第一份合约数据: {first_contract_file}，数据量: {len(df_copy)} 行")
+    except Exception as e:
+        logger.error(f"读取第一份合约数据失败: {str(e)}")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # 处理剩余合约
+    for i in range(1, len(contract_files)):
+        current_contract_file = contract_files[i]
+        try:
+            # 读取当前合约数据
+            df_current = pd.read_csv(current_contract_file)
+            
+            # 验证必要的列
+            required_columns = [date_column, amount_column, oi_column]
+            missing_columns = [col for col in required_columns if col not in df_current.columns]
+            if missing_columns:
+                logger.warning(f"合约 {current_contract_file} 缺少必要列: {missing_columns}，跳过此合约")
+                continue
+            
+            # 获取当前合约代码
+            current_contract_code = os.path.basename(current_contract_file).split('_')[0]
+            logger.info(f"正在处理合约: {current_contract_code}，数据量: {len(df_current)} 行")
+            
+            # 查找切换点
+            switch_date = None
+            for _, row in df_current.iterrows():
+                date = row[date_column]
+                
+                # 查找df_copy中对应日期的行
+                copy_row = df_copy[df_copy[date_column] == date]
+                if not copy_row.empty:
+                    # 比较amount和oi
+                    current_amount = row[amount_column] if pd.notna(row[amount_column]) else 0
+                    current_oi = row[oi_column] if pd.notna(row[oi_column]) else 0
+                    copy_amount = copy_row[amount_column].iloc[0] if pd.notna(copy_row[amount_column].iloc[0]) else 0
+                    copy_oi = copy_row[oi_column].iloc[0] if pd.notna(copy_row[oi_column].iloc[0]) else 0
+                    
+                    # 当新合约的amount和oi都大于df_copy的数据时，确定切换点
+                    if current_amount > copy_amount and current_oi > copy_oi:
+                        switch_date = date
+                        logger.debug(f"发现合约切换点: {date}, 从 {df_switch_record[df_switch_record[date_column] == date][fut_code_column].values[0]} 切换到 {current_contract_code}")
+                        break
+            
+            # 执行切换逻辑
+            if switch_date:
+                # 更新df_copy中切换点及之后的数据
+                switch_idx = df_copy[df_copy[date_column] == switch_date].index[0]
+                
+                # 更新df_copy
+                for _, row in df_current.iterrows():
+                    date = row[date_column]
+                    copy_row_idx = df_copy[df_copy[date_column] == date].index
+                    
+                    if not copy_row_idx.empty:
+                        # 如果日期存在，更新数据
+                        if copy_row_idx[0] >= switch_idx:
+                            df_copy.loc[copy_row_idx[0]] = row
+                    else:
+                        # 如果日期不存在，添加新数据
+                        df_copy = pd.concat([df_copy, pd.DataFrame([row])], ignore_index=True)
+                        # 按日期排序
+                        df_copy = df_copy.sort_values(by=date_column)
+                
+                # 更新df_switch_record
+                switch_record_idx = df_switch_record[df_switch_record[date_column] == switch_date].index[0]
+                df_switch_record.loc[switch_record_idx:, fut_code_column] = current_contract_code
+                
+                # 为新增日期添加切换记录
+                new_dates = [date for date in df_current[date_column] if date not in df_switch_record[date_column].values]
+                if new_dates:
+                    new_records = pd.DataFrame({
+                        date_column: new_dates,
+                        fut_code_column: current_contract_code
+                    })
+                    df_switch_record = pd.concat([df_switch_record, new_records], ignore_index=True)
+                    # 按日期排序
+                    df_switch_record = df_switch_record.sort_values(by=date_column)
+            else:
+                # 如果没有找到切换点，只添加df_copy中不存在的日期数据
+                new_rows = []
+                new_switch_records = []
+                
+                for _, row in df_current.iterrows():
+                    date = row[date_column]
+                    if date not in df_copy[date_column].values:
+                        new_rows.append(row)
+                        new_switch_records.append({
+                            date_column: date,
+                            fut_code_column: current_contract_code
+                        })
+                
+                # 添加新数据
+                if new_rows:
+                    df_copy = pd.concat([df_copy, pd.DataFrame(new_rows)], ignore_index=True)
+                    df_copy = df_copy.sort_values(by=date_column)
+                    
+                    df_switch_record = pd.concat([df_switch_record, pd.DataFrame(new_switch_records)], ignore_index=True)
+                    df_switch_record = df_switch_record.sort_values(by=date_column)
+                    
+                    logger.debug(f"为合约 {current_contract_code} 添加了 {len(new_rows)} 条新日期数据")
+                else:
+                    logger.debug(f"合约 {current_contract_code} 没有需要添加的新日期数据")
+                    
+        except Exception as e:
+            logger.error(f"处理合约 {current_contract_file} 失败: {str(e)}")
+            continue
+    
+    logger.info(f"合约序列处理完成，最终主力合约数据行数: {len(df_copy)}，切换记录行数: {len(df_switch_record)}")
+    return df_copy, df_switch_record
+
 def _sort_files_by_yymm(contracts: List[str]) -> List[str]:
     """
     私有函数：按YYMM时间信息对合约列表进行排序
@@ -838,10 +995,45 @@ def main():
         if user_input.lower() != 'y':
             logger.info("用户取消操作")
             return
-        # 创建主力合约序列
-        main_contract_mapping, switch_records = create_main_contract_series(
-            all_dates, contract_files=kline_files, volume_files=volume_files, allow_delivery_month=args.Delivery
+        # 创建主力合约序列 - 使用_process_contract_sequence私有函数
+        # 将合约文件映射转换为文件路径列表
+        contract_file_paths = list(kline_files.values())
+        
+        # 调用_process_contract_sequence函数处理合约序列
+        main_contract_data, df_switch_record = _process_contract_sequence(
+            contract_files=contract_file_paths, 
+            date_column='trade_date', 
+            amount_column='amount', 
+            oi_column='oi', 
+            fut_code_column='fut_code'
         )
+        
+        # 转换返回数据为原create_main_contract_series函数的格式
+        # 创建主力合约映射DataFrame
+        if not df_switch_record.empty:
+            main_contract_mapping = df_switch_record.rename(columns={
+                'trade_date': 'trade_date',
+                'fut_code': 'main_contract'
+            })
+            # 添加volume列（设置默认值为0，可根据需要从main_contract_data获取）
+            main_contract_mapping['volume'] = 0
+        else:
+            main_contract_mapping = pd.DataFrame()
+        
+        # 转换合约切换记录
+        switch_records = []
+        if not df_switch_record.empty:
+            previous_contract = None
+            for idx, row in df_switch_record.iterrows():
+                current_contract = row['fut_code']
+                if previous_contract and previous_contract != current_contract:
+                    switch_records.append({
+                        'date': row['trade_date'],
+                        'from_contract': previous_contract,
+                        'to_contract': current_contract,
+                        'switch_index': idx
+                    })
+                previous_contract = current_contract
         
         if main_contract_mapping.empty:
             logger.error("无法生成主力合约映射数据")
