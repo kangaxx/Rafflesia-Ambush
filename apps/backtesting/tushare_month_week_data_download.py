@@ -40,7 +40,7 @@ def main():
     parser.add_argument("-c", "--code", required=True, help="期货代码，如 RB2310.SHF")
     parser.add_argument("-s", "--start", help="开始日期，格式YYYYMMDD，可选")
     parser.add_argument("-e", "--end", help="结束日期，格式YYYYMMDD，可选")
-    parser.add_argument("-o", "--output", default="./fut_month_data.csv", help="输出文件路径，默认为 ./fut_month_data.csv")
+    parser.add_argument("-o", "--output", default="./data/out/monthly", help="输出文件路径，默认为 ./data/out/monthly")
     parser.add_argument("--token_path", default="key.json", help="Tushare token文件路径，默认为 key.json")
     parser.add_argument("-f", "--freq", choices=["month", "week"], default="month", help="数据频率，month（月度）或 week（周度），默认为 month")
     args = parser.parse_args()
