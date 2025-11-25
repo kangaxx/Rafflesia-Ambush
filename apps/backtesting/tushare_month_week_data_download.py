@@ -9,7 +9,7 @@ def get_tushare_token(token_path="key.json"):
         raise FileNotFoundError(f"未找到 {token_path} 文件。")
     with open(token_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return data.get("token")
+    return data.get("tushare_token")
 
 def download_data(ts_code, start_date, end_date, output, token, freq):
     ts.set_token(token)
