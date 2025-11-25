@@ -748,70 +748,7 @@ def _get_contract_volume(contract_code: str, date: pd.Timestamp, volume_files: D
         logger.debug(f"获取合约 {contract_code} 在 {date} 的交易量失败: {str(e)}")
     return 0
 
-def build_main_contract_kline(main_contract_mapping: pd.DataFrame, 
-                            contract_files: Dict[str, str],
-                            future_code: str) -> pd.DataFrame:
-    """
-    构建主力合约K线数据
-    """
-    logger.debug(f"[build_main_contract_kline] 开始构建主力合约K线数据，映射记录数: {len(main_contract_mapping)}, 合约文件数: {len(contract_files)}")
-    
-    main_contract_data = []
-    successful_records = 0  
-    failed_records = 0
-    missing_files = 0
-    
-    for idx, row in main_contract_mapping.iterrows():
-        date = row['trade_date']
-        contract_code = row['main_contract']
-        volume = row['volume']
-        
-        logger.debug(f"[build_main_contract_kline] 处理记录 {idx+1}/{len(main_contract_mapping)} - 日期: {date}, 合约: {contract_code}, 交易量: {volume}")
-        
-        if contract_code not in contract_files:
-            logger.debug(f"[build_main_contract_kline] 合约文件不存在: {contract_code}")
-            missing_files += 1
-            failed_records += 1
-            continue
-        
-        df = load_kline_data(contract_code, contract_files)
-        if df is None:
-            logger.debug(f"[build_main_contract_kline] 无法加载合约K线数据: {contract_code}")
-            failed_records += 1
-            continue
-        
-        # 查找该日期的K线数据
-        date_data = df[df['trade_date'] == date].copy()
-        if date_data.empty:
-            logger.debug(f"[build_main_contract_kline] 合约 {contract_code} 在日期 {date} 无K线数据")
-            failed_records += 1
-            continue
-        
-        # 添加主力合约标识
-        date_data['symbol'] = f"{future_code}9999"
-        date_data['original_contract'] = contract_code
-        main_contract_data.append(date_data)
-        successful_records += 1
-        logger.debug(f"[build_main_contract_kline] 成功添加记录: {contract_code} @ {date}")
-        
-        # 添加进度信息
-        if (idx + 1) % 10 == 0 or idx == len(main_contract_mapping) - 1:
-            logger.debug(f"[build_main_contract_kline] 进度: {idx+1}/{len(main_contract_mapping)} - 成功: {successful_records}, 失败: {failed_records}")
-    
-    # 记录构建完成的统计信息
-    logger.debug(f"[build_main_contract_kline] 构建完成 - 总记录数: {len(main_contract_mapping)}, 成功添加: {successful_records}, 失败: {failed_records}")
-    logger.debug(f"[build_main_contract_kline] 失败原因统计: 缺失文件: {missing_files}, 加载失败: {failed_records - missing_files}")
-    
-    # 合并所有数据
-    if main_contract_data:
-        main_df = pd.concat(main_contract_data)
-        # 按日期排序
-        main_df = main_df.sort_values('trade_date')
-        # 重置索引
-        main_df = main_df.reset_index(drop=True)
-        return main_df
-    else:
-        return pd.DataFrame()
+
 
 def save_results(main_contract_kline: pd.DataFrame, 
                 main_contract_mapping: pd.DataFrame, 
@@ -1042,27 +979,37 @@ def main():
         logger.info(f"成功确定 {len(main_contract_mapping)} 个交易日的主力合约")
         logger.info(f"发现 {len(switch_records)} 次主力合约切换")
         
-        # 构建主力合约K线数据
-        logger.info("构建主力合约K线数据...")
-        main_contract_kline = build_main_contract_kline(
-            main_contract_mapping, kline_files, args.future_code
-        )
-        
-        if main_contract_kline.empty:
-            logger.error("无法生成主力合约K线数据")
-            return
-        
-        logger.info(f"成功构建主力合约K线数据，共 {len(main_contract_kline)} 条记录")
-        
-        # 保存结果
+        # 直接保存_process_contract_sequence返回的原始数据
         logger.info("保存结果文件...")
-        save_results(
-            main_contract_kline, 
-            main_contract_mapping, 
-            switch_records,
-            args.output_dir,
-            args.future_code
-        )
+        # 确保输出目录存在
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        # 保存主力合约数据（main_contract_data）
+        main_data_file = os.path.join(args.output_dir, f"{args.future_code}_main_data.csv")
+        main_contract_data.to_csv(main_data_file, index=False, encoding='utf-8')
+        logger.info(f"主力合约数据已保存至: {main_data_file}")
+        
+        # 保存主力合约切换记录（df_switch_record）
+        switch_record_file = os.path.join(args.output_dir, f"{args.future_code}_switch_record.csv")
+        df_switch_record.to_csv(switch_record_file, index=False, encoding='utf-8')
+        logger.info(f"主力合约切换记录已保存至: {switch_record_file}")
+        
+        # 保存主力合约映射数据
+        mapping_output_file = os.path.join(args.output_dir, f"{args.future_code}_main_contract_mapping.csv")
+        main_contract_mapping.to_csv(mapping_output_file, index=False, encoding='utf-8')
+        logger.info(f"每日主力合约映射记录已保存至: {mapping_output_file}")
+        
+        # 保存主力合约切换记录列表
+        switch_output_file = os.path.join(args.output_dir, f"{args.future_code}_main_contract_switches.csv")
+        if switch_records:
+            switch_df = pd.DataFrame(switch_records)
+            switch_df.to_csv(switch_output_file, index=False, encoding='utf-8')
+            logger.info(f"主力合约切换记录列表已保存至: {switch_output_file}")
+        else:
+            # 如果没有切换记录，创建空文件
+            with open(switch_output_file, 'w', encoding='utf-8') as f:
+                f.write("date,from_contract,to_contract,switch_index\n")
+            logger.info(f"未发现主力合约切换，已创建空切换记录文件: {switch_output_file}")
         
         logger.info("主力合约数据生成完成！")
         
