@@ -309,7 +309,7 @@ def download_future_data(pro, symbol, start_date, end_date, save_dir=None):
             trade_date='',
             start_date=start_date,
             end_date=end_date,
-            fields='ts_code,trade_date,open,high,low,close,volume,amount,oi,oi_chg'  
+            fields='ts_code,trade_date,open,high,low,close,settle,volume,amount,oi,oi_chg'
         )
         
         if df.empty:
