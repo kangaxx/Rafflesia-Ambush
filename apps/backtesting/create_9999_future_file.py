@@ -60,7 +60,7 @@ def get_default_output_dir(future_code: str) -> str:
     tushare_root = os.path.expanduser(tushare_root)
     
     # 构建完整输出路径
-    output_dir = os.path.join(tushare_root)
+    output_dir = os.path.join(tushare_root, index_path)
     logger.info(f"使用默认输出目录: {output_dir}")
     return output_dir
 
