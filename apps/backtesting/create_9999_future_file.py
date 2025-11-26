@@ -835,9 +835,6 @@ def main():
         if not validate_directory(args.kline_data_dir):
             return
         
-        # 确保输出目录存在
-        os.makedirs(args.output_dir, exist_ok=True)
-        
         # 获取所有合约文件
         volume_files = get_all_contract_files(args.volume_data_dir, args.future_code)
         kline_files = get_all_contract_files(args.kline_data_dir, args.future_code)
