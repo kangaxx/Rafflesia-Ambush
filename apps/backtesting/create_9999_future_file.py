@@ -50,7 +50,7 @@ def get_default_params() -> Dict[str, str]:
 def get_default_output_dir(future_code: str) -> str:
     """
     获取默认输出目录
-    逻辑: 如果没有明确输入-o参数，则使用 tushare_root + index + "/" + future_code
+    逻辑: 如果没有明确输入-o参数，则使用 tushare_root + index
     """
     default_params = get_default_params()
     tushare_root = default_params.get('tushare_root', './data')
@@ -60,7 +60,7 @@ def get_default_output_dir(future_code: str) -> str:
     tushare_root = os.path.expanduser(tushare_root)
     
     # 构建完整输出路径
-    output_dir = os.path.join(tushare_root, index_path.lstrip('/'), future_code)
+    output_dir = os.path.join(tushare_root)
     logger.info(f"使用默认输出目录: {output_dir}")
     return output_dir
 
