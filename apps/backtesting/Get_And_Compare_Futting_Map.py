@@ -33,21 +33,21 @@ logger = logging.getLogger(__name__)
 
 def _read_tushare_token() -> Optional[str]:
     """
-    从tushare.json文件中读取token
+    从key.json文件中读取token
     
     Returns:
         token字符串，如果文件不存在或读取失败则返回None
     """
     try:
-        # 尝试读取与脚本同目录的tushare.json文件
+        # 尝试读取与脚本同目录的key.json文件
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        tushare_json_path = os.path.join(script_dir, 'tushare.json')
+        key_json_path = os.path.join(script_dir, 'key.json')
         
-        if not os.path.exists(tushare_json_path):
-            logger.warning(f"tushare.json文件不存在: {tushare_json_path}")
+        if not os.path.exists(key_json_path):
+            logger.warning(f"key.json文件不存在: {key_json_path}")
             return None
         
-        with open(tushare_json_path, 'r', encoding='utf-8') as f:
+        with open(key_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
         # 尝试从不同可能的键中获取token
@@ -58,17 +58,17 @@ def _read_tushare_token() -> Optional[str]:
             token = data.get('tushare_token')
         
         if not token:
-            logger.warning("tushare.json文件中未找到有效的token")
+            logger.warning("key.json文件中未找到有效的token")
             return None
         
-        logger.info("成功从tushare.json读取token")
+        logger.info("成功从key.json读取token")
         return token
         
     except json.JSONDecodeError as e:
-        logger.error(f"解析tushare.json文件失败: {str(e)}")
+        logger.error(f"解析key.json文件失败: {str(e)}")
         return None
     except Exception as e:
-        logger.error(f"读取tushare.json文件时发生错误: {str(e)}")
+        logger.error(f"读取key.json文件时发生错误: {str(e)}")
         return None
 
 def parse_arguments():
@@ -169,7 +169,7 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
     token = _read_tushare_token()
     if not token:
         logger.error("未找到有效的tushare token，无法调用API")
-        raise RuntimeError("未找到有效的tushare token，请确保tushare.json文件中包含有效的token")
+        raise RuntimeError("未找到有效的tushare token，请确保key.json文件中包含有效的token")
     
     try:
         # 初始化tushare API
