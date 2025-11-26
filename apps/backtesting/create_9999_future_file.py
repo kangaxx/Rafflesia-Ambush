@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime
 import logging
 import re
+import json
 from typing import Dict, List, Tuple, Optional
 
 # 配置日志
@@ -21,8 +22,8 @@ def parse_arguments() -> argparse.Namespace:
                         help='期货合约K线数据文件集所在路径（原始数据，默认使用与volume_data_dir相同的路径）')
     parser.add_argument('-c', '--contract_list_file', required=False,
                         help='期货合约列表文件名称（非必须，若未提供或文件不存在/数据不准确，将跳过数据校验）')
-    parser.add_argument('-o', '--output_dir', required=False, default='./data/out',
-                        help='结果文件输出路径（默认: ./data/out）')
+    parser.add_argument('-o', '--output_dir', required=False,
+                        help='结果文件输出路径（默认: 从default_param_list.json获取）')
     parser.add_argument('-f', '--future_code', required=True,
                         help='期货品类代码（如 rb、cu 等）')
     parser.add_argument('-d', '--date_format', default='YYYYMMDD',
@@ -30,6 +31,38 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('-l', '--Delivery', type=lambda x: x.lower() == 'true', default=False,
                         help='是否允许交割月合约作为主力合约，输入true或false，默认为false')
     return parser.parse_args()
+
+def get_default_params() -> Dict[str, str]:
+    """
+    读取default_param_list.json文件获取默认参数
+    """
+    default_params = {}
+    try:
+        param_file = os.path.join(os.path.dirname(__file__), 'default_param_list.json')
+        with open(param_file, 'r', encoding='utf-8') as f:
+            default_params = json.load(f)
+        logger.info(f"成功读取默认参数配置: {default_params}")
+    except Exception as e:
+        logger.error(f"读取默认参数配置失败: {str(e)}")
+    print(default_params)
+    return default_params
+
+def get_default_output_dir(future_code: str) -> str:
+    """
+    获取默认输出目录
+    逻辑: 如果没有明确输入-o参数，则使用 tushare_root + index + "/" + future_code
+    """
+    default_params = get_default_params()
+    tushare_root = default_params.get('tushare_root', './data')
+    index_path = default_params.get('index', '/data/raw/index')
+    
+    # 处理路径中的波浪号
+    tushare_root = os.path.expanduser(tushare_root)
+    
+    # 构建完整输出路径
+    output_dir = os.path.join(tushare_root, index_path.lstrip('/'), future_code)
+    logger.info(f"使用默认输出目录: {output_dir}")
+    return output_dir
 
 def validate_directory(directory: str) -> bool:
     """
@@ -981,26 +1014,33 @@ def main():
         
         # 直接保存_process_contract_sequence返回的原始数据
         logger.info("保存结果文件...")
+        
+        # 确定输出目录
+        output_dir = args.output_dir
+        if not output_dir:
+            # 如果未明确指定输出目录，则使用默认配置
+            output_dir = get_default_output_dir(args.future_code)
+        
         # 确保输出目录存在
-        os.makedirs(args.output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         
         # 保存主力合约数据（main_contract_data）
-        main_data_file = os.path.join(args.output_dir, f"{args.future_code}_main_data.csv")
+        main_data_file = os.path.join(output_dir, f"{args.future_code}9999.csv")
         main_contract_data.to_csv(main_data_file, index=False, encoding='utf-8')
         logger.info(f"主力合约数据已保存至: {main_data_file}")
         
         # 保存主力合约切换记录（df_switch_record）
-        switch_record_file = os.path.join(args.output_dir, f"{args.future_code}_switch_record.csv")
+        switch_record_file = os.path.join(output_dir, f"{args.future_code}_switch_record.csv")
         df_switch_record.to_csv(switch_record_file, index=False, encoding='utf-8')
         logger.info(f"主力合约切换记录已保存至: {switch_record_file}")
         
         # 保存主力合约映射数据
-        mapping_output_file = os.path.join(args.output_dir, f"{args.future_code}_main_contract_mapping.csv")
+        mapping_output_file = os.path.join(output_dir, f"{args.future_code}_main_contract_mapping.csv")
         main_contract_mapping.to_csv(mapping_output_file, index=False, encoding='utf-8')
         logger.info(f"每日主力合约映射记录已保存至: {mapping_output_file}")
         
         # 保存主力合约切换记录列表
-        switch_output_file = os.path.join(args.output_dir, f"{args.future_code}_main_contract_switches.csv")
+        switch_output_file = os.path.join(output_dir, f"{args.future_code}_main_contract_switches.csv")
         if switch_records:
             switch_df = pd.DataFrame(switch_records)
             switch_df.to_csv(switch_output_file, index=False, encoding='utf-8')
