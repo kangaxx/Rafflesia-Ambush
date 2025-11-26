@@ -91,26 +91,14 @@ def get_future_data_params():
     Returns:
         tuple: (symbol, output_dir)
     """
-    # 打印说明文字
-    print("\n" + "="*60)
-    print("          下载期货产品全历史日线数据")
-    print("="*60)
-    print("本功能将下载期货产品的全历史日线数据。")
-    print("请输入以下参数：")
-    
-    # 显示期货交易所信息
-    print("\n支持的期货交易所：")
-    print("  SHFE/SHF - 上海期货交易所")
-    print("  DCE      - 大连商品交易所")
-    print("  CZCE     - 郑州商品交易所")
-    print("  CFFEX    - 中国金融期货交易所")
-    print("  INE      - 上海国际能源交易中心")
+    # 显示交易所信息
+    print("支持的期货交易所：SHFE/SHF(上海), DCE(大连), CZCE(郑州), CFFEX(中金), INE(上期能源)")
     
     # 获取期货产品编码
     while True:
-        symbol = input("\n请输入期货产品编码 (格式: 品种.交易所，例如: RB.SHFE): ").strip()
+        symbol = input("\n请输入商品代码，范例RB.SHFE: ").strip()
         if not symbol:
-            print("期货产品编码不能为空，请重新输入")
+            print("商品代码不能为空，请重新输入")
             continue
         
         if '.' not in symbol:
@@ -127,10 +115,7 @@ def get_future_data_params():
         break
     
     # 获取保存路径
-    print("\n请输入文件保存路径：")
-    print("提示：如果直接回车，将使用默认配置参数中的路径 (tushare_root + future + 1d)")
-    
-    output_dir = input("保存路径: ").strip()
+    output_dir = input("请输入文件保存路径, 如果直接回车则使用 default_param_list.json文件的 tushare_root + future + 1d: ").strip()
     
     # 如果用户直接回车，尝试从默认参数文件获取路径
     if not output_dir:
@@ -139,18 +124,16 @@ def get_future_data_params():
         if tushare_root:
             # 构建默认路径: tushare_root + future + 1d
             output_dir = os.path.join(tushare_root, 'future', '1d')
-            print(f"\n使用默认保存路径: {output_dir}")
+            print(f"使用默认保存路径: {output_dir}")
         else:
             # 如果没有默认配置，使用当前目录下的data文件夹
             output_dir = os.path.join(CURRENT_DIR, 'data')
-            print(f"\n未找到默认配置，使用默认保存路径: {output_dir}")
+            print(f"未找到默认配置，使用默认保存路径: {output_dir}")
     
     # 显示确认信息
-    print("\n" + "="*60)
-    print(f"期货产品编码: {symbol}")
+    print(f"\n商品代码: {symbol}")
     print(f"保存路径: {output_dir}")
     print(f"工作模式: -m 2 (下载所有合约数据)")
-    print("="*60)
     
     # 确认开始下载
     while True:
@@ -233,12 +216,12 @@ def main() -> int:
     
     # 定义功能映射
     menu_map = {
-        '1': 'create_9999_future_file.py',
+        '1': 'rb_tushare_data_download.py',
         '2': 'Get_Fut_Mapping_Code.py',
         '3': 'Get_Work_Date_Info.py',
         '4': 'create_index_contract.py',
         '5': 'decode.py',
-        '6': 'rb_tushare_data_download.py',
+        '6': 'create_9999_future_file.py',
         '7': 'trader_demo.py',
         '8': 'tushare_month_week_data_download.py'
     }
@@ -262,13 +245,8 @@ def main() -> int:
             # 获取对应脚本
             script_name = menu_map[choice]
             
-            # 询问是否需要额外参数
-            extra_args_input = input("是否需要输入额外参数? (y/n): ").strip().lower()
+            # 初始化extra_args
             extra_args = []
-            
-            if extra_args_input == 'y':
-                args_str = input("请输入额外参数(以空格分隔): ").strip()
-                extra_args = args_str.split()
             
             # 执行脚本
             print("-" * 60)
