@@ -113,18 +113,18 @@ def get_future_data_params():
             continue
             
         break
-    
+            # 读取各参数值
+    tushare_root = load_default_params().get('tushare_root', '')
+    future_path = load_default_params().get('future', '')
+    one_d_path = load_default_params().get('1d', '')
     # 获取保存路径
-    output_dir = input("请输入文件保存路径, 如果直接回车则使用 default_param_list.json文件的 tushare_root + future + 1d: ").strip()
+    output_dir = input(f"请输入文件保存路径, 如果直接回车则使用 default_param_list.json文件的 {tushare_root + future_path + one_d_path}: ").strip()
     
     # 如果用户直接回车，尝试从默认参数文件获取路径
     if not output_dir:
-        default_params = load_default_params()
+
         
-        # 读取各参数值
-        tushare_root = default_params.get('tushare_root', '')
-        future_path = default_params.get('future', '')
-        one_d_path = default_params.get('1d', '')
+
         
         if tushare_root:
             # 展开~为用户目录
