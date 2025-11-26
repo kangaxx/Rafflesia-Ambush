@@ -6,6 +6,7 @@ import sys
 import time
 import subprocess
 import logging
+import json
 from typing import Dict, Any
 
 # 获取当前目录
@@ -65,6 +66,105 @@ def show_welcome_page():
     """
     print(welcome_text)
 
+def load_default_params():
+    """
+    从default_param_list.json文件加载默认参数
+    
+    Returns:
+        dict: 默认参数字典
+    """
+    default_params_file = os.path.join(CURRENT_DIR, 'default_param_list.json')
+    try:
+        with open(default_params_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"默认参数文件不存在: {default_params_file}")
+        return {}
+    except json.JSONDecodeError:
+        logger.warning(f"默认参数文件格式错误: {default_params_file}")
+        return {}
+
+def get_future_data_params():
+    """
+    获取期货数据下载参数
+    
+    Returns:
+        tuple: (symbol, output_dir)
+    """
+    # 打印说明文字
+    print("\n" + "="*60)
+    print("          下载期货产品全历史日线数据")
+    print("="*60)
+    print("本功能将下载期货产品的全历史日线数据。")
+    print("请输入以下参数：")
+    
+    # 显示期货交易所信息
+    print("\n支持的期货交易所：")
+    print("  SHFE/SHF - 上海期货交易所")
+    print("  DCE      - 大连商品交易所")
+    print("  CZCE     - 郑州商品交易所")
+    print("  CFFEX    - 中国金融期货交易所")
+    print("  INE      - 上海国际能源交易中心")
+    
+    # 获取期货产品编码
+    while True:
+        symbol = input("\n请输入期货产品编码 (格式: 品种.交易所，例如: RB.SHFE): ").strip()
+        if not symbol:
+            print("期货产品编码不能为空，请重新输入")
+            continue
+        
+        if '.' not in symbol:
+            print("格式错误，请使用 '品种.交易所' 格式，例如: RB.SHFE")
+            continue
+            
+        # 验证交易所标识
+        exchange = symbol.split('.')[-1].upper()
+        valid_exchanges = ['SHFE', 'SHF', 'DCE', 'CZCE', 'CFFEX', 'INE']
+        if exchange not in valid_exchanges:
+            print(f"无效的交易所标识: {exchange}。有效的交易所为: {', '.join(valid_exchanges)}")
+            continue
+            
+        break
+    
+    # 获取保存路径
+    print("\n请输入文件保存路径：")
+    print("提示：如果直接回车，将使用默认配置参数中的路径 (tushare_root + future + 1d)")
+    
+    output_dir = input("保存路径: ").strip()
+    
+    # 如果用户直接回车，尝试从默认参数文件获取路径
+    if not output_dir:
+        default_params = load_default_params()
+        tushare_root = default_params.get('tushare_root', '')
+        if tushare_root:
+            # 构建默认路径: tushare_root + future + 1d
+            output_dir = os.path.join(tushare_root, 'future', '1d')
+            print(f"\n使用默认保存路径: {output_dir}")
+        else:
+            # 如果没有默认配置，使用当前目录下的data文件夹
+            output_dir = os.path.join(CURRENT_DIR, 'data')
+            print(f"\n未找到默认配置，使用默认保存路径: {output_dir}")
+    
+    # 显示确认信息
+    print("\n" + "="*60)
+    print(f"期货产品编码: {symbol}")
+    print(f"保存路径: {output_dir}")
+    print(f"工作模式: -m 2 (下载所有合约数据)")
+    print("="*60)
+    
+    # 确认开始下载
+    while True:
+        confirm = input("\n确认开始下载？(y/n): ").strip().lower()
+        if confirm == 'y':
+            break
+        elif confirm == 'n':
+            print("取消下载操作")
+            return None, None
+        else:
+            print("请输入 'y' 或 'n'")
+    
+    return symbol, output_dir
+
 def run_script(script_name: str, args: list = None):
     """
     执行指定的脚本
@@ -76,6 +176,21 @@ def run_script(script_name: str, args: list = None):
     Returns:
         执行的返回码
     """
+    # 特殊处理下载期货数据功能
+    if script_name == 'rb_tushare_data_download.py':
+        # 获取参数
+        symbol, output_dir = get_future_data_params()
+        if symbol is None or output_dir is None:
+            return 0  # 用户取消操作
+        
+        # 构建参数列表，默认使用-m 2模式
+        script_args = ['-s', symbol, '-m', '2']
+        if output_dir:
+            script_args.extend(['-o', output_dir])
+            
+        # 覆盖传入的args
+        args = script_args
+    
     script_path = os.path.join(CURRENT_DIR, script_name)
     
     # 检查脚本是否存在
