@@ -82,12 +82,12 @@ def parse_arguments():
   支持位置参数模式和短选项模式，且大部分参数都有默认值。
 
 默认值说明:
-  - save_path: './data/out'              # 数据保存路径
-  - compare_source: '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'  # 对比源文件
-  - result_path: 'compare_futting_map.csv'  # 对比结果输出路径
+  - save_path: './data/out'
+  - compare_source: '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'
+  - result_path: 'compare_futting_map.csv'
 
 使用范例:
-  # 最简模式：只提供期货代码，其他使用默认值
+  # 最简模式：只提供期货代码
   python Get_And_Compare_Futting_Map.py RB.SHF
   python Get_And_Compare_Futting_Map.py -c RB.SHF
   
@@ -103,8 +103,7 @@ def parse_arguments():
   python Get_And_Compare_Futting_Map.py -h
         """)
     
-    # 添加互斥组，支持位置参数或短选项，但不能同时使用
-    group = parser.add_mutually_exclusive_group(required=True)
+    # 移除未使用的互斥组，位置参数和短选项现在可以更灵活地使用
     
     # 短选项模式
     parser.add_argument('-c', '--fut_code', help='期货产品代码，例如：RB.SHF（必需）', required=False)
