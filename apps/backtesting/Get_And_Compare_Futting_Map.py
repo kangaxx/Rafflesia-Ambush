@@ -85,7 +85,8 @@ def parse_arguments():
     python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv -f compare_data.csv -r result.csv
     
   使用默认路径:
-    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv
+    python Get_And_Compare_Futting_Map.py -c RB.SHF  # 只提供期货代码，其他使用默认值
+    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv  # 提供期货代码和保存路径
         """)
     
     # 添加互斥组，支持位置参数或短选项，但不能同时使用
@@ -93,7 +94,7 @@ def parse_arguments():
     
     # 短选项模式
     parser.add_argument('-c', '--fut_code', help='期货产品代码，例如：RB.SHF', required=False)
-    parser.add_argument('-s', '--save_path', help='文件保存路径', required=False)
+    parser.add_argument('-s', '--save_path', help='文件保存路径', required=False, default='./data/out')
     parser.add_argument('-f', '--compare_source', help='作为对比的文件来源', 
                         default='/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv')
     parser.add_argument('-r', '--result_path', help='比较结果输出路径', 
@@ -111,14 +112,17 @@ def parse_arguments():
         args.compare_source = args.positional_args[2]
         args.result_path = args.positional_args[3]
     elif args.positional_args and len(args.positional_args) == 2:
-        # 支持只提供前两个必需参数的位置参数模式
+        # 支持只提供前两个参数的位置参数模式
         args.fut_code = args.positional_args[0]
         args.save_path = args.positional_args[1]
+    elif args.positional_args and len(args.positional_args) == 1:
+        # 支持只提供fut_code的位置参数模式
+        args.fut_code = args.positional_args[0]
     elif args.positional_args:
-        parser.error("位置参数模式需要提供2个必需参数或4个完整参数：fut_code save_path [compare_source result_path]")
+        parser.error("位置参数模式需要提供1个、2个或4个参数：fut_code [save_path [compare_source result_path]]")
     
     # 验证必需的参数都已提供
-    required_args = ['fut_code', 'save_path']
+    required_args = ['fut_code']
     for arg_name in required_args:
         if not getattr(args, arg_name):
             parser.error(f"缺少必需参数：{arg_name}（请使用位置参数或短选项）")

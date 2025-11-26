@@ -174,10 +174,9 @@ def get_future_compare_params():
             break
         print("无效的期货产品代码格式，请包含交易所信息（如RB.SHFE）")
     
-    # 获取文件保存路径
-    save_path = input("请输入文件保存路径: ").strip()
-    while not save_path:
-        save_path = input("保存路径不能为空，请重新输入: ").strip()
+    # 获取文件保存路径（可选）
+    default_save_path = './data/out'
+    save_path = input(f"请输入文件保存路径（直接回车使用默认路径: {default_save_path}）: ").strip()
     
     # 获取对比源文件（可选）
     default_compare_source = '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'
@@ -188,7 +187,9 @@ def get_future_compare_params():
     result_path = input(f"请输入比较结果输出路径（直接回车使用默认路径: {default_result_path}）: ").strip()
     
     # 构建参数列表，只包含用户提供了值的可选参数
-    params = ['-c', fut_code, '-s', save_path]
+    params = ['-c', fut_code]
+    if save_path:
+        params.extend(['-s', save_path])
     if compare_source:
         params.extend(['-f', compare_source])
     if result_path:
