@@ -77,27 +77,41 @@ def parse_arguments():
         description='期货映射代码对比工具',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  位置参数模式:
-    python Get_And_Compare_Futting_Map.py RB.SHF mapping_data.csv compare_data.csv result.csv
+使用说明:
+  本工具用于获取期货合约映射数据并与现有文件进行对比。
+  支持位置参数模式和短选项模式，且大部分参数都有默认值。
+
+默认值说明:
+  - save_path: './data/out'              # 数据保存路径
+  - compare_source: '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'  # 对比源文件
+  - result_path: 'compare_futting_map.csv'  # 对比结果输出路径
+
+使用范例:
+  # 最简模式：只提供期货代码，其他使用默认值
+  python Get_And_Compare_Futting_Map.py RB.SHF
+  python Get_And_Compare_Futting_Map.py -c RB.SHF
   
-  短选项模式:
-    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv -f compare_data.csv -r result.csv
-    
-  使用默认路径:
-    python Get_And_Compare_Futting_Map.py -c RB.SHF  # 只提供期货代码，其他使用默认值
-    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv  # 提供期货代码和保存路径
+  # 提供期货代码和保存路径
+  python Get_And_Compare_Futting_Map.py RB.SHF ./my_data
+  python Get_And_Compare_Futting_Map.py -c RB.SHF -s ./my_data
+  
+  # 完整参数模式
+  python Get_And_Compare_Futting_Map.py RB.SHF ./my_data ./compare_file.csv ./result.csv
+  python Get_And_Compare_Futting_Map.py -c RB.SHF -s ./my_data -f ./compare_file.csv -r ./result.csv
+  
+  # 查看帮助信息
+  python Get_And_Compare_Futting_Map.py -h
         """)
     
     # 添加互斥组，支持位置参数或短选项，但不能同时使用
     group = parser.add_mutually_exclusive_group(required=True)
     
     # 短选项模式
-    parser.add_argument('-c', '--fut_code', help='期货产品代码，例如：RB.SHF', required=False)
-    parser.add_argument('-s', '--save_path', help='文件保存路径', required=False, default='./data/out')
-    parser.add_argument('-f', '--compare_source', help='作为对比的文件来源', 
+    parser.add_argument('-c', '--fut_code', help='期货产品代码，例如：RB.SHF（必需）', required=False)
+    parser.add_argument('-s', '--save_path', help=f'文件保存路径（默认: ./data/out）', required=False, default='./data/out')
+    parser.add_argument('-f', '--compare_source', help=f'作为对比的文件来源（默认: /root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv）', 
                         default='/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv')
-    parser.add_argument('-r', '--result_path', help='比较结果输出路径', 
+    parser.add_argument('-r', '--result_path', help=f'比较结果输出路径（默认: compare_futting_map.csv）', 
                         default='compare_futting_map.csv')
     
     # 位置参数模式（通过nargs='*'和检查来实现）
