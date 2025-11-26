@@ -102,7 +102,7 @@ def get_future_data_params():
             continue
         
         if '.' not in symbol:
-            print("格式错误，请使用 '品种.交易所' 格式，例如: RB.SHFE")
+            print("格式错误，请使用 '品种.交易所' 格式，例如: RB.SHF")
             continue
             
         # 验证交易所标识
@@ -120,10 +120,24 @@ def get_future_data_params():
     # 如果用户直接回车，尝试从默认参数文件获取路径
     if not output_dir:
         default_params = load_default_params()
+        
+        # 读取各参数值
         tushare_root = default_params.get('tushare_root', '')
+        future_path = default_params.get('future', '')
+        one_d_path = default_params.get('1d', '')
+        
         if tushare_root:
+            # 展开~为用户目录
+            tushare_root_expanded = os.path.expanduser(tushare_root)
             # 构建默认路径: tushare_root + future + 1d
-            output_dir = os.path.join(tushare_root, 'future', '1d')
+            output_dir = tushare_root_expanded + future_path + one_d_path
+            
+            # 显示参数值和拼接过程
+            print(f"\n从default_param_list.json获取的参数值：")
+            print(f"tushare_root = '{tushare_root}' (展开为: '{tushare_root_expanded}')")
+            print(f"future = '{future_path}'")
+            print(f"1d = '{one_d_path}'")
+            print(f"\n路径拼接: {tushare_root_expanded} + {future_path} + {one_d_path}")
             print(f"使用默认保存路径: {output_dir}")
         else:
             # 如果没有默认配置，使用当前目录下的data文件夹
