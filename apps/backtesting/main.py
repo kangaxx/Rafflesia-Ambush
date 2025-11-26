@@ -179,18 +179,22 @@ def get_future_compare_params():
     while not save_path:
         save_path = input("保存路径不能为空，请重新输入: ").strip()
     
-    # 获取对比源文件
-    compare_source = input("请输入作为对比的文件来源: ").strip()
-    while not compare_source:
-        compare_source = input("对比源文件不能为空，请重新输入: ").strip()
+    # 获取对比源文件（可选）
+    default_compare_source = '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'
+    compare_source = input(f"请输入作为对比的文件来源（直接回车使用默认路径: {default_compare_source}）: ").strip()
     
-    # 获取结果输出路径
-    result_path = input("请输入比较结果输出路径: ").strip()
-    while not result_path:
-        result_path = input("结果输出路径不能为空，请重新输入: ").strip()
+    # 获取结果输出路径（可选）
+    default_result_path = 'compare_futting_map.csv'
+    result_path = input(f"请输入比较结果输出路径（直接回车使用默认路径: {default_result_path}）: ").strip()
     
-    # 返回构建的参数列表
-    return [fut_code, save_path, compare_source, result_path]
+    # 构建参数列表，只包含用户提供了值的可选参数
+    params = ['-c', fut_code, '-s', save_path]
+    if compare_source:
+        params.extend(['-f', compare_source])
+    if result_path:
+        params.extend(['-r', result_path])
+    
+    return params
 
 def run_script(script_name: str, args: list = None):
     """

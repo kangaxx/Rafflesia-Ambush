@@ -72,16 +72,61 @@ def _read_tushare_token() -> Optional[str]:
         return None
 
 def parse_arguments():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='期货映射代码对比工具')
+    """解析命令行参数，支持位置参数和短选项模式"""
+    parser = argparse.ArgumentParser(
+        description='期货映射代码对比工具',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  位置参数模式:
+    python Get_And_Compare_Futting_Map.py RB.SHF mapping_data.csv compare_data.csv result.csv
+  
+  短选项模式:
+    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv -f compare_data.csv -r result.csv
     
-    # 添加命令行参数
-    parser.add_argument('fut_code', help='期货产品代码，例如：RB.SHF')
-    parser.add_argument('save_path', help='文件保存路径')
-    parser.add_argument('compare_source', help='作为对比的文件来源')
-    parser.add_argument('result_path', help='比较结果输出路径')
+  使用默认路径:
+    python Get_And_Compare_Futting_Map.py -c RB.SHF -s mapping_data.csv
+        """)
     
-    return parser.parse_args()
+    # 添加互斥组，支持位置参数或短选项，但不能同时使用
+    group = parser.add_mutually_exclusive_group(required=True)
+    
+    # 短选项模式
+    parser.add_argument('-c', '--fut_code', help='期货产品代码，例如：RB.SHF', required=False)
+    parser.add_argument('-s', '--save_path', help='文件保存路径', required=False)
+    parser.add_argument('-f', '--compare_source', help='作为对比的文件来源', 
+                        default='/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv')
+    parser.add_argument('-r', '--result_path', help='比较结果输出路径', 
+                        default='compare_futting_map.csv')
+    
+    # 位置参数模式（通过nargs='*'和检查来实现）
+    parser.add_argument('positional_args', nargs='*', help='位置参数：fut_code save_path compare_source result_path')
+    
+    args = parser.parse_args()
+    
+    # 处理位置参数模式
+    if args.positional_args and len(args.positional_args) == 4:
+        args.fut_code = args.positional_args[0]
+        args.save_path = args.positional_args[1]
+        args.compare_source = args.positional_args[2]
+        args.result_path = args.positional_args[3]
+    elif args.positional_args and len(args.positional_args) == 2:
+        # 支持只提供前两个必需参数的位置参数模式
+        args.fut_code = args.positional_args[0]
+        args.save_path = args.positional_args[1]
+    elif args.positional_args:
+        parser.error("位置参数模式需要提供2个必需参数或4个完整参数：fut_code save_path [compare_source result_path]")
+    
+    # 验证必需的参数都已提供
+    required_args = ['fut_code', 'save_path']
+    for arg_name in required_args:
+        if not getattr(args, arg_name):
+            parser.error(f"缺少必需参数：{arg_name}（请使用位置参数或短选项）")
+    
+    # 移除positional_args属性，保持接口一致性
+    delattr(args, 'positional_args')
+    
+    return args
 
 def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
     """
