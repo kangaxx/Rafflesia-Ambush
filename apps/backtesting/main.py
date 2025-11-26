@@ -96,7 +96,7 @@ def get_future_data_params():
     
     # 获取期货产品编码
     while True:
-        symbol = input("\n请输入商品代码，范例RB.SHFE: ").strip()
+        symbol = input("\n请输入商品代码，范例RB.SHF: ").strip()
         if not symbol:
             print("商品代码不能为空，请重新输入")
             continue
