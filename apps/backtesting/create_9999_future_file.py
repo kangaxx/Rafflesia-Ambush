@@ -59,8 +59,8 @@ def get_default_output_dir(future_code: str) -> str:
     # 处理路径中的波浪号
     tushare_root = os.path.expanduser(tushare_root)
     
-    # 构建完整输出路径
-    output_dir = os.path.join(tushare_root, index_path)
+    # 构建完整输出路径，移除index_path开头的斜杠以确保正确拼接
+    output_dir = os.path.join(tushare_root, index_path.lstrip('/'))
     logger.info(f"使用默认输出目录: {output_dir}")
     return output_dir
 
