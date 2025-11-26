@@ -60,6 +60,7 @@ def show_welcome_page():
     6. 下载螺纹钢数据(Tushare)
     7. 交易员演示
     8. 下载月度/周度数据(Tushare)
+    9. 期货映射代码对比
     
     请输入功能对应的数字进行选择，或输入0退出系统。
     ====================================================
@@ -162,6 +163,35 @@ def get_future_data_params():
     
     return symbol, output_dir
 
+def get_future_compare_params():
+    """
+    获取期货映射对比的参数
+    """
+    # 获取期货产品代码
+    while True:
+        fut_code = input("请输入期货产品代码（例如：RB.SHFE）: ").strip()
+        if fut_code and '.' in fut_code:
+            break
+        print("无效的期货产品代码格式，请包含交易所信息（如RB.SHFE）")
+    
+    # 获取文件保存路径
+    save_path = input("请输入文件保存路径: ").strip()
+    while not save_path:
+        save_path = input("保存路径不能为空，请重新输入: ").strip()
+    
+    # 获取对比源文件
+    compare_source = input("请输入作为对比的文件来源: ").strip()
+    while not compare_source:
+        compare_source = input("对比源文件不能为空，请重新输入: ").strip()
+    
+    # 获取结果输出路径
+    result_path = input("请输入比较结果输出路径: ").strip()
+    while not result_path:
+        result_path = input("结果输出路径不能为空，请重新输入: ").strip()
+    
+    # 返回构建的参数列表
+    return [fut_code, save_path, compare_source, result_path]
+
 def run_script(script_name: str, args: list = None):
     """
     执行指定的脚本
@@ -187,6 +217,7 @@ def run_script(script_name: str, args: list = None):
             
         # 覆盖传入的args
         args = script_args
+
     
     script_path = os.path.join(CURRENT_DIR, script_name)
     
@@ -237,13 +268,14 @@ def main() -> int:
         '5': 'decode.py',
         '6': 'create_9999_future_file.py',
         '7': 'trader_demo.py',
-        '8': 'tushare_month_week_data_download.py'
+        '8': 'tushare_month_week_data_download.py',
+        '9': 'Get_And_Compare_Futting_Map.py'
     }
     
     try:
         while True:
             # 获取用户选择
-            choice = input("\n请输入功能编号(0-8): ").strip()
+            choice = input("\n请输入功能编号(0-9): ").strip()
             
             # 退出系统
             if choice == '0':
@@ -253,14 +285,25 @@ def main() -> int:
             
             # 检查选择是否有效
             if choice not in menu_map:
-                print("无效的选择，请输入0-8之间的数字")
+                print("无效的选择，请输入0-9之间的数字")
                 continue
             
             # 获取对应脚本
             script_name = menu_map[choice]
             
-            # 初始化extra_args
-            extra_args = []
+            # 功能1特殊处理：获取期货数据参数
+            if choice == '1':
+                extra_args = get_future_data_params()
+            # 功能9特殊处理：获取期货映射对比参数
+            elif choice == '9':
+                extra_args = get_future_compare_params()
+            else:
+                # 初始化extra_args
+                extra_args = []
+                # 其他功能：询问是否需要输入额外参数
+                need_args = input("是否需要输入额外参数? (y/n): ").strip().lower()
+                if need_args == 'y':
+                    extra_args = input("请输入额外参数 (空格分隔): ").strip().split()
             
             # 执行脚本
             print("-" * 60)
