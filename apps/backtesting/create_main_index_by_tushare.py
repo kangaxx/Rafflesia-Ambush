@@ -124,7 +124,7 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                 # 如果从文件未获取到数据，则记录警告
                 if df is None or df.empty:
                     logger.warning(f"未获取到合约 {ts_code} 在 {trade_date} 的数据")
-                    continue
+                    return
                 
                 # 如果成功读取到数据，添加到主连数据中
                 if df is not None and not df.empty:
@@ -212,41 +212,81 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
         dict: 找到的一行数据（如果有且只有一行），否则终止程序
     """
     # 打印输入参数
-    print(f"参数信息 - fut_code: {fut_code}, trade_date: {trade_date}, file_name: {file_name}")
+    print(f"[开始处理] - 合约代码: {fut_code}, 交易日期: {trade_date}, 文件路径: {file_name}")
+    logger.info(f"开始从CSV文件获取日线数据: 合约={fut_code}, 日期={trade_date}, 文件={file_name}")
     
     # 检查文件是否存在
     if not os.path.exists(file_name):
-        print(f"错误：文件不存在 - {file_name}")
-        logger.error(f"无法找到合约文件: {file_name}")
+        error_msg = f"错误：文件不存在 - {file_name}"
+        print(f"[严重错误] {error_msg}")
+        logger.error(f"文件不存在错误: {file_name}")
         sys.exit(1)
+    
+    print(f"[文件确认] 成功找到合约文件: {file_name}")
+    logger.info(f"文件存在性验证通过: {file_name}")
     
     # 读取文件并查找匹配的数据行
     matched_rows = []
     headers = None
+    total_rows_processed = 0
+    
     try:
+        print(f"[数据读取] 开始读取文件内容并匹配条件...")
         with open(file_name, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             headers = reader.fieldnames
             
+            # 验证表头是否包含必要字段
+            required_fields = ['fut_code', 'trade_date']
+            missing_fields = [field for field in required_fields if field not in headers]
+            
+            if missing_fields:
+                error_msg = f"错误：文件缺少必要字段: {', '.join(missing_fields)}"
+                print(f"[格式错误] {error_msg}")
+                logger.error(error_msg)
+                print(f"[当前表头] 文件包含的字段: {', '.join(headers)}")
+                sys.exit(1)
+            
+            print(f"[表头验证] 文件包含所有必要字段: {', '.join(required_fields)}")
+            
+            # 遍历数据行查找匹配
             for row in reader:
+                total_rows_processed += 1
                 # 检查fut_code和trade_date是否匹配
                 if ('fut_code' in row and row['fut_code'] == fut_code and 
                     'trade_date' in row and row['trade_date'] == trade_date):
                     matched_rows.append(row)
+                    print(f"[找到匹配] 发现一行匹配数据 (行号: {total_rows_processed})")
+        
+        print(f"[读取完成] 共处理 {total_rows_processed} 行数据")
+        logger.info(f"文件读取完成: 处理了{total_rows_processed}行数据，找到{len(matched_rows)}个匹配")
+        
+    except UnicodeDecodeError:
+        error_msg = f"错误：文件编码错误，无法使用UTF-8编码读取"
+        print(f"[编码错误] {error_msg}")
+        logger.error(f"文件编码错误: {file_name}, 错误信息: UnicodeDecodeError")
+        sys.exit(1)
+    except csv.Error as e:
+        error_msg = f"错误：CSV格式错误 - {str(e)}"
+        print(f"[格式错误] {error_msg}")
+        logger.error(f"CSV格式解析错误: {file_name}, 错误信息: {str(e)}")
+        sys.exit(1)
     except Exception as e:
-        print(f"读取文件时出错: {e}")
-        return None
+        error_msg = f"读取文件时发生未预期的错误: {str(e)}"
+        print(f"[读取错误] {error_msg}")
+        logger.error(f"文件读取异常: {file_name}, 错误信息: {str(e)}")
+        sys.exit(1)
     
     # 处理查找结果
     if len(matched_rows) == 0:
         # 未找到数据，打印头三行信息并终止程序
         error_msg = f"""错误：未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})
 无法从mapping文件中获取对应的日线数据，程序终止。"""
-        print(error_msg)
+        print(f"[数据缺失] {error_msg}")
         logger.error(error_msg)
         
         # 打印文件的头三行信息
-        print("文件头三行信息：")
+        print("[文件预览] 文件头三行信息：")
         try:
             with open(file_name, 'r', encoding='utf-8') as f:
                 # 打印表头
@@ -261,23 +301,42 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
                         break
                     line_count += 1
         except Exception as e:
-            print(f"读取文件头部信息时出错: {e}")
+            print(f"[预览失败] 读取文件头部信息时出错: {e}")
+        
+        print(f"[匹配条件] 请确认数据文件中是否存在以下匹配条件：")
+        print(f"  - fut_code = '{fut_code}'")
+        print(f"  - trade_date = '{trade_date}'")
         
         sys.exit(1)
     
     elif len(matched_rows) > 1:
         # 找到多行数据，打印并报错终止程序
         error_msg = f"错误：找到多行匹配的数据 ({len(matched_rows)}行)"
-        print(error_msg)
+        print(f"[数据冲突] {error_msg}")
         logger.error(error_msg)
+        print(f"[冲突详情] 匹配到的多行数据：")
         for i, row in enumerate(matched_rows):
             print(f"第{i+1}行匹配数据: {row}")
+        print(f"[问题分析] 数据文件中存在重复的(fut_code, trade_date)组合，这可能导致数据使用错误")
         sys.exit(1)
     
     else:
         # 正常情况：找到且只有一行数据
-        print("成功找到唯一匹配的数据行")
-        return matched_rows[0]
+        matched_data = matched_rows[0]
+        # 提取关键价格信息用于日志（如果存在）
+        price_info = ""
+        for field in ['open', 'high', 'low', 'close']:
+            if field in matched_data:
+                price_info += f"{field}: {matched_data[field]}, "
+        if price_info:
+            price_info = price_info.rstrip(', ')
+        else:
+            price_info = "[无价格字段]"
+        
+        print(f"[匹配成功] 成功找到唯一匹配的数据行")
+        print(f"[数据摘要] {price_info}")
+        logger.info(f"成功获取日线数据: {fut_code} {trade_date}, {price_info}")
+        return matched_data
 
 
 def parse_arguments():
