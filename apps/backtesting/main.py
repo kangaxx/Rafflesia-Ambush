@@ -53,7 +53,7 @@ def show_welcome_page():
     
     功能列表：
     1. 下载期货产品全历史日线数据
-    2. 获取期货合约映射关系
+    2. 生成期货主力合约
     3. 获取工作日信息
     4. 创建指数合约
     5. 解码数据
@@ -267,7 +267,7 @@ def main() -> int:
     # 定义功能映射
     menu_map = {
         '1': 'rb_tushare_data_download.py',
-        '2': 'Get_Fut_Mapping_Code.py',
+        '2': 'create_main_index_by_tushare.py',
         '3': 'Get_Work_Date_Info.py',
         '4': 'create_index_contract.py',
         '5': 'decode.py',
@@ -299,6 +299,73 @@ def main() -> int:
             # 功能1特殊处理：获取期货数据参数
             if choice == '1':
                 extra_args = get_future_data_params()
+            # 功能2特殊处理：生成期货主力合约
+            elif choice == '2':
+                # 获取合约代码，提示用户输入并给出范例
+                while True:
+                    fut_code = input("请输入合约代码，范例RB.SHF: ").strip()
+                    if fut_code and '.' in fut_code:
+                        break
+                    print("无效的合约代码格式，请使用类似 'RB.SHF' 的格式")
+                
+                # 从默认参数配置文件中获取配置
+                default_params = load_default_params()
+                tushare_root = default_params.get('tushare_root', '')
+                index_path = default_params.get('index', '')
+                future_path = default_params.get('future', '')
+                one_d_path = default_params.get('1d', '')
+                
+                # 构建路径
+                save_path = tushare_root + index_path
+                contract_path = tushare_root + future_path + one_d_path
+                
+                # 展开~为用户目录
+                save_path = os.path.expanduser(save_path)
+                contract_path = os.path.expanduser(contract_path)
+                
+                print(f"\n构建的路径信息：")
+                print(f"- tushare_root: {tushare_root}")
+                print(f"- index_path: {index_path}")
+                print(f"- future_path: {future_path}")
+                print(f"- one_d_path: {one_d_path}")
+                print(f"- 保存路径(save_path): {save_path}")
+                print(f"- 合约路径(contract_path): {contract_path}")
+                
+                # 首先调用Get_And_Compare_Futting_Map.py
+                print(f"\n正在调用Get_And_Compare_Futting_Map.py获取映射数据...")
+                map_script_path = os.path.join(CURRENT_DIR, 'Get_And_Compare_Futting_Map.py')
+                map_args = ['-c', fut_code, '-s', save_path]
+                
+                # 执行第一个脚本
+                try:
+                    print(f"执行命令: {sys.executable} {map_script_path} {' '.join(map_args)}")
+                    result = subprocess.run(
+                        [sys.executable, map_script_path] + map_args,
+                        cwd=CURRENT_DIR,
+                        check=True,
+                        capture_output=True,
+                        text=True
+                    )
+                    print(f"映射数据获取成功！")
+                    logger.info(f"Get_And_Compare_Futting_Map.py执行成功，输出: {result.stdout}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Get_And_Compare_Futting_Map.py执行失败: {e.stderr}")
+                    print(f"错误: 映射数据获取失败 - {e.stderr}")
+                    print("请检查合约代码和配置是否正确后重试")
+                    continue
+                except Exception as e:
+                    logger.error(f"调用Get_And_Compare_Futting_Map.py时出错: {str(e)}")
+                    print(f"错误: {str(e)}")
+                    continue
+                
+                # 然后调用create_main_index_by_tushare.py
+                print(f"\n正在调用create_main_index_by_tushare.py生成主连数据...")
+                # 设置参数
+                extra_args = [
+                    '-c', fut_code,
+                    '-p', contract_path,
+                    '-o', save_path
+                ]
             # 功能9特殊处理：获取期货映射对比参数
             elif choice == '9':
                 extra_args = get_future_compare_params()

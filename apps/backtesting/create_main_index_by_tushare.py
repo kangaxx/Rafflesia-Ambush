@@ -243,11 +243,15 @@ def main():
         # 处理映射文件路径，如果未指定则使用默认路径
         mapping_file = args.mapping_file
         if mapping_file is None:
-            # 使用当前脚本所在目录作为默认路径
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            # 使用合约编码作为默认文件名格式：产品代码+交易所代码+_fut_mapping.csv
-            mapping_file = os.path.join(script_dir, f"{args.fut_code}_fut_mapping.csv")
-            logger.info(f"未指定映射文件路径，使用默认路径: {mapping_file}")
+            # 优先在output_path中查找映射文件
+            if args.output_path:
+                mapping_file = os.path.join(args.output_path, f"{args.fut_code}_fut_mapping.csv")
+                logger.info(f"未指定映射文件路径，优先在输出路径中查找: {mapping_file}")
+            else:
+                # 使用当前脚本所在目录作为默认路径
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                mapping_file = os.path.join(script_dir, f"{args.fut_code}_fut_mapping.csv")
+                logger.info(f"未指定映射文件路径和输出路径，使用默认路径: {mapping_file}")
         
         # 第一步：检查映射文件是否存在
         if not os.path.exists(mapping_file):
