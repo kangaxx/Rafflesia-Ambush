@@ -240,8 +240,8 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
     # 处理查找结果
     if len(matched_rows) == 0:
         # 未找到数据，打印头三行信息并终止程序
-        error_msg = f"错误：未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})
-无法从mapping文件中获取对应的日线数据，程序终止。"
+        error_msg = f"""错误：未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})
+无法从mapping文件中获取对应的日线数据，程序终止。"""
         print(error_msg)
         logger.error(error_msg)
         
