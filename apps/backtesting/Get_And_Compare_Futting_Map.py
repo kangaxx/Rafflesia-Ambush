@@ -219,27 +219,33 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
         
         raise RuntimeError(error_msg)
 
-def save_mapping_data(data: List[Dict[str, Any]], save_path: str):
+def save_mapping_data(data: List[Dict[str, Any]], save_path: str, fut_code: str):
     """
     保存映射数据到文件
     
     Args:
         data: 映射数据列表
-        save_path: 保存路径
+        save_path: 保存路径（目录）
+        fut_code: 期货产品编码
     """
-    logger.info(f"保存映射数据到 {save_path}")
+    # 拼接完整文件名：期货产品编码 + 'fut_mapping.csv'
+    filename = f"{fut_code}_fut_mapping.csv"
+    # 组合完整文件路径
+    full_file_path = os.path.join(save_path, filename)
+    
+    logger.info(f"保存映射数据到 {full_file_path}")
     
     # 确保保存目录存在
-    os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(full_file_path)), exist_ok=True)
     
     # 保存数据到文件
     try:
-        with open(save_path, 'w', encoding='utf-8') as f:
+        with open(full_file_path, 'w', encoding='utf-8') as f:
             # 写入CSV格式，包含trade_date和mapping_ts_code字段
             f.write("trade_date,mapping_ts_code\n")  # 写入表头
             for item in data:
                 f.write(f"{item.get('trade_date', '')},{item.get('mapping_ts_code', '')}\n")
-        logger.info(f"映射数据已成功保存到 {save_path}")
+        logger.info(f"映射数据已成功保存到 {full_file_path}")
     except Exception as e:
         logger.error(f"保存映射数据失败: {str(e)}")
         raise
@@ -415,7 +421,7 @@ def main():
         mapping_data = get_future_mapping(args.fut_code)
         
         # 保存映射数据
-        save_mapping_data(mapping_data, args.save_path)
+        save_mapping_data(mapping_data, args.save_path, args.fut_code)
         
         # 加载对比源数据
         compare_data = load_compare_source(args.compare_source)
