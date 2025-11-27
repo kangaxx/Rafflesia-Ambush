@@ -182,9 +182,7 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
         
         # 调用API，使用正确的参数
         df = pro.fut_mapping(
-            ts_code='',  # 这里不填，使用下面的条件筛选
-            symbol=symbol,  # 期货品种代码
-            exchange=exchange,  # 交易所代码
+            ts_code=fut_code, # 期货品种代码
             fields='ts_code,trade_date,mapping_ts_code'  # 请求的字段
         )
         
