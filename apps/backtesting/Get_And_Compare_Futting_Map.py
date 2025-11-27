@@ -185,8 +185,8 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
             ts_code=fut_code, # 期货品种代码
             fields='ts_code,trade_date,mapping_ts_code'  # 请求的字段
         )
-        # 默认下载的数据df是时间倒序排列的，我们需要对df执行一次逆序排列
-        df = df.sort_values(by='trade_date', ascending=False)
+        # 默认下载的数据df是时间倒序排列的，我们需要对df执行一次顺序排列
+        df = df.sort_values(by='trade_date', ascending=True)
 
         logger.info(f"成功获取 {len(df)} 条映射数据")
         
