@@ -59,7 +59,7 @@ def _read_tushare_token():
         raise
 
 
-def create_main_index(fut_code, mapping_file, contract_path=None):
+def create_main_index(fut_code, mapping_file, contract_path=None, output_path=None):
     """
     创建期货主连指数数据
     
@@ -67,6 +67,7 @@ def create_main_index(fut_code, mapping_file, contract_path=None):
         fut_code: 合约编码，如 'RB.SHF'
         mapping_file: 映射文件路径，包含交易日期与当日主连期货的映射关系
         contract_path: 普通合约文件集所在路径，默认为None
+        output_path: 主力合约数据存储路径，默认为None
     
     Returns:
         bool: 创建是否成功
@@ -170,7 +171,11 @@ def create_main_index(fut_code, mapping_file, contract_path=None):
             return False
         
         # 创建保存目录
-        save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'main_index_data')
+        if output_path is not None:
+            save_dir = output_path
+        else:
+            save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'main_index_data')
+        
         os.makedirs(save_dir, exist_ok=True)
         
         # 保存数据
@@ -195,7 +200,7 @@ def parse_arguments():
         description='创建期货主连指数数据',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""使用示例:
-# 使用默认映射文件路径和默认合约文件集路径创建螺纹钢主连指数数据
+# 使用所有默认路径创建螺纹钢主连指数数据
 python create_main_index_by_tushare.py -c RB.SHF
 
 # 使用自定义映射文件路径和默认合约文件集路径创建主连指数数据
@@ -203,6 +208,9 @@ python create_main_index_by_tushare.py -c RB.SHF -m custom_path/RB.SHF_fut_mappi
 
 # 使用自定义映射文件路径和自定义合约文件集路径创建主连指数数据
 python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_files/
+
+# 使用所有自定义路径创建主连指数数据
+python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_files/ -o output_data/
 """
     )
     
@@ -216,6 +224,10 @@ python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_file
     # 添加第三个参数：普通合约文件集所在路径
     parser.add_argument('-p', '--contract_path', type=str, default=None, 
                         help='普通合约文件集所在路径，如不指定则使用默认路径')
+    
+    # 添加第四个参数：主力合约数据存储路径
+    parser.add_argument('-o', '--output_path', type=str, default=None, 
+                        help='主力合约数据存储路径，如不指定则使用默认路径')
     
     return parser.parse_args()
 
@@ -250,8 +262,13 @@ def main():
             if not os.path.exists(contract_path):
                 logger.warning(f"指定的普通合约文件集路径不存在: {contract_path}")
         
+        # 处理第四个参数：主力合约数据存储路径
+        output_path = args.output_path
+        if output_path is not None:
+            logger.info(f"使用指定的主力合约数据存储路径: {output_path}")
+        
         # 创建主连指数数据
-        success = create_main_index(args.fut_code, mapping_file, contract_path)
+        success = create_main_index(args.fut_code, mapping_file, contract_path, output_path)
 
         
         if success:
