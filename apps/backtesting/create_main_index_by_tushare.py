@@ -116,10 +116,6 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                             else:
                                 # 没有获取到数据
                                 df = pd.DataFrame()
-                            else:
-                                # 注意：按照要求，合约的编号应该是RB0909这种不带.SHF的格式
-                                # 只使用基础格式，不再尝试其他格式
-                                logger.warning(f"合约文件不存在: {contract_file}")
                         else:
                             logger.warning(f"无法从ts_code {ts_code} 中提取年月信息")
                     except Exception as e:
