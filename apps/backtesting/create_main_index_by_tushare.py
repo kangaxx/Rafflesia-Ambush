@@ -144,16 +144,17 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
             logger.warning("未能创建主连指数数据")
             return False
         
-        # 创建保存目录
+        # 构建保存路径
         if output_path is not None:
-            save_dir = output_path
+            # 直接使用output_path参数值 + fut_code + '_main_index.csv'
+            save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
+            # 确保输出目录存在
+            os.makedirs(output_path, exist_ok=True)
         else:
+            # 使用默认路径
             save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'main_index_data')
-        
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # 保存数据
-        save_path = os.path.join(save_dir, f"{fut_code.replace('.', '')}_main_index.csv")
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f"{fut_code}_main_index.csv")
         df.to_csv(save_path, index=False, encoding='utf-8')
         
         logger.info(f"主连指数数据已保存至: {save_path}")
@@ -184,6 +185,7 @@ python create_main_index_by_tushare.py -c RB.SHF -m custom_path/RB.SHF_fut_mappi
 python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_files/
 
 # 使用所有自定义路径创建主连指数数据
+# 主连数据将保存至: output_data/RB.SHF_main_index.csv
 python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_files/ -o output_data/
 """
     )
