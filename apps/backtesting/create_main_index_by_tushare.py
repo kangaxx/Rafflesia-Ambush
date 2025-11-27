@@ -96,17 +96,30 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                             year_month = match.group()
                             # 构建文件名：fut_code + YY + MM + '.csv'
                             # 例如：RB.SHF2401.csv
+                            # 提取交易所代码
+                            exchange = fut_code.split('.')[1]
+                            
+                            # 尝试基础格式: 品种+年月.csv (如RB0909.csv)
                             contract_file_name = f"{base_code}{year_month}.csv"
                             contract_file = os.path.join(contract_path, contract_file_name)
                             
-                            logger.info(f"从合约文件 {contract_file} 读取数据")
+                            logger.info(f"尝试读取合约文件: {contract_file}")
                             if os.path.exists(contract_file):
                                 df = pd.read_csv(contract_file)
-                                # 查找指定交易日的数据
                                 df = df[df['trade_date'] == trade_date]
-                                logger.info(f"成功从文件读取到 {trade_date} 的数据")
+                                logger.info(f"成功从基础格式文件读取到 {trade_date} 的数据")
                             else:
-                                logger.warning(f"合约文件不存在: {contract_file}")
+                                # 尝试带交易所格式: 品种+年月+交易所.csv (如RB0909.SHF.csv)
+                                contract_file_name = f"{base_code}{year_month}.{exchange}.csv"
+                                contract_file = os.path.join(contract_path, contract_file_name)
+                                logger.info(f"基础格式文件不存在，尝试读取带交易所格式文件: {contract_file}")
+                                
+                                if os.path.exists(contract_file):
+                                    df = pd.read_csv(contract_file)
+                                    df = df[df['trade_date'] == trade_date]
+                                    logger.info(f"成功从带交易所格式文件读取到 {trade_date} 的数据")
+                                else:
+                                    logger.warning(f"两种格式合约文件均不存在: {base_code}{year_month}.csv 和 {base_code}{year_month}.{exchange}.csv")
                         else:
                             logger.warning(f"无法从ts_code {ts_code} 中提取年月信息")
                     except Exception as e:
