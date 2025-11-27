@@ -6,5 +6,6 @@
   "index": "/data/raw/index",
   "calendar": "/data/raw/calendar",
   "driver": "/data/driver", 
-  "calibrated": "/data/calibrated"
+  "calibrated": "/data/calibrated",
+  "main_index": "_main_index.csv"
 }

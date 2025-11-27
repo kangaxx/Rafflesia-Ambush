@@ -233,9 +233,13 @@ def main():
         # 解析命令行参数
         args = parse_arguments()
         
-        # 处理映射文件路径，如果未指定则使用默认路径
-        mapping_file = args.mapping_file
-        if mapping_file is None:
+        # 处理映射文件路径，如果指定了路径则在该路径下查找fut_code+'_fut_mapping.csv'
+        if args.mapping_file:
+            # 如果指定了映射文件路径，将其视为目录，并在其中查找特定文件名
+            mapping_file = os.path.join(args.mapping_file, f"{args.fut_code}_fut_mapping.csv")
+            logger.info(f"使用指定路径查找映射文件: {mapping_file}")
+        else:
+            # 如果未指定映射文件路径，则按照原有逻辑处理
             # 优先在output_path中查找映射文件
             if args.output_path:
                 mapping_file = os.path.join(args.output_path, f"{args.fut_code}_fut_mapping.csv")
