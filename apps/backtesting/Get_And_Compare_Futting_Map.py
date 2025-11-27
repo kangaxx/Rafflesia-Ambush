@@ -85,6 +85,7 @@ def parse_arguments():
   - save_path: './data/out'
   - compare_source: '/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv'
   - result_path: 'compare_futting_map.csv'
+  - do_compare: False (默认不执行比较操作)
 
 使用范例:
   # 最简模式：只提供期货代码
@@ -99,6 +100,10 @@ def parse_arguments():
   python Get_And_Compare_Futting_Map.py RB.SHF ./my_data ./compare_file.csv ./result.csv
   python Get_And_Compare_Futting_Map.py -c RB.SHF -s ./my_data -f ./compare_file.csv -r ./result.csv
   
+  # 执行比较操作
+  python Get_And_Compare_Futting_Map.py -c RB.SHF -d
+  python Get_And_Compare_Futting_Map.py RB.SHF -d
+  
   # 查看帮助信息
   python Get_And_Compare_Futting_Map.py -h
         """)
@@ -112,6 +117,8 @@ def parse_arguments():
                         default='/root/Rafflesia-Ambush/apps/backtesting/data/out/RB_main_contract_mapping.csv')
     parser.add_argument('-r', '--result_path', help=f'比较结果输出路径（默认: compare_futting_map.csv）', 
                         default='compare_futting_map.csv')
+    parser.add_argument('-d', '--do_compare', help='是否执行比较操作（默认: False）', 
+                        action='store_true', default=False)
     
     # 位置参数模式（通过nargs='*'和检查来实现）
     parser.add_argument('positional_args', nargs='*', help='位置参数：fut_code save_path compare_source result_path')
@@ -423,25 +430,30 @@ def main():
         # 保存映射数据
         save_mapping_data(mapping_data, args.save_path, args.fut_code)
         
-        # 加载对比源数据
-        compare_data = load_compare_source(args.compare_source)
-        
-        # 比较数据
-        comparison_result = compare_mapping_data(mapping_data, compare_data)
-        
-        # 保存比较结果
-        save_comparison_result(comparison_result, args.result_path)
-        
-        # 统计相同和不同的记录数
-        same_count = sum(1 for item in comparison_result if item['is_same'])
-        different_count = sum(1 for item in comparison_result if not item['is_same'])
-        
-        # 显示结果摘要
-        print(f"对比完成！")
-        print(f"- 总记录数: {len(comparison_result)}")
-        print(f"- 相同记录: {same_count}")
-        print(f"- 不同记录: {different_count}")
-        print(f"详细结果已保存至: {args.result_path}")
+        # 根据do_compare参数决定是否执行比较操作
+        if args.do_compare:
+            # 加载对比源数据
+            compare_data = load_compare_source(args.compare_source)
+            
+            # 比较数据
+            comparison_result = compare_mapping_data(mapping_data, compare_data)
+            
+            # 保存比较结果
+            save_comparison_result(comparison_result, args.result_path)
+            
+            # 统计相同和不同的记录数
+            same_count = sum(1 for item in comparison_result if item['is_same'])
+            different_count = sum(1 for item in comparison_result if not item['is_same'])
+            
+            # 显示结果摘要
+            print(f"对比完成！")
+            print(f"- 总记录数: {len(comparison_result)}")
+            print(f"- 相同记录: {same_count}")
+            print(f"- 不同记录: {different_count}")
+            print(f"详细结果已保存至: {args.result_path}")
+        else:
+            print(f"数据获取完成，未执行比较操作")
+            print(f"映射数据已保存至: {os.path.join(args.save_path, f'{args.fut_code}_fut_mapping.csv')}")
         
         return 0
         
