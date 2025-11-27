@@ -105,21 +105,25 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                             
                             logger.info(f"尝试读取合约文件: {contract_file}")
                             if os.path.exists(contract_file):
-                                df = pd.read_csv(contract_file)
-                                df = df[df['trade_date'] == trade_date]
-                                logger.info(f"成功从基础格式文件读取到 {trade_date} 的数据")
-                            else:
-                                # 尝试带交易所格式: 品种+年月+交易所.csv (如RB0909.SHF.csv)
-                                contract_file_name = f"{base_code}{year_month}.{exchange}.csv"
-                                contract_file = os.path.join(contract_path, contract_file_name)
-                                logger.info(f"基础格式文件不存在，尝试读取带交易所格式文件: {contract_file}")
+                                # 先完整读取数据框，避免多次过滤后数据丢失
+                                original_df = pd.read_csv(contract_file)
+                                # 注意：文件内的ts_code可能带有.SHF后缀
+                                # 需要同时匹配ts_code和trade_date两列
+                                # 构建完整的合约代码（带交易所后缀）用于匹配
+                                full_ts_code = f"{base_code}{year_month}.{exchange}"
+                                # 先尝试精确匹配带交易所后缀的ts_code
+                                df = original_df[(original_df['ts_code'] == full_ts_code) & (original_df['trade_date'] == trade_date)]
                                 
-                                if os.path.exists(contract_file):
-                                    df = pd.read_csv(contract_file)
-                                    df = df[df['trade_date'] == trade_date]
-                                    logger.info(f"成功从带交易所格式文件读取到 {trade_date} 的数据")
+                                # 如果没有找到匹配项，可能ts_code不带后缀，尝试只根据trade_date过滤
+                                if df.empty:
+                                    df = original_df[original_df['trade_date'] == trade_date]
+                                    logger.info(f"通过trade_date过滤获取到 {trade_date} 的数据")
                                 else:
-                                    logger.warning(f"两种格式合约文件均不存在: {base_code}{year_month}.csv 和 {base_code}{year_month}.{exchange}.csv")
+                                    logger.info(f"成功通过ts_code和trade_date匹配获取到 {trade_date} 的数据")
+                            else:
+                                # 注意：按照要求，合约的编号应该是RB0909这种不带.SHF的格式
+                                # 只使用基础格式，不再尝试其他格式
+                                logger.warning(f"合约文件不存在: {contract_file}")
                         else:
                             logger.warning(f"无法从ts_code {ts_code} 中提取年月信息")
                     except Exception as e:
