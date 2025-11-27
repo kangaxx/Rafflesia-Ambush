@@ -197,6 +197,8 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
         raise
 
 
+import sys
+
 def get_day_kline_from_csv(fut_code, trade_date, file_name):
     """
     从CSV文件中获取指定合约和日期的日线K线数据
@@ -207,7 +209,7 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
         file_name: CSV文件路径
     
     Returns:
-        dict: 找到的一行数据（如果有且只有一行），否则返回None
+        dict: 找到的一行数据（如果有且只有一行），否则终止程序
     """
     # 打印输入参数
     print(f"参数信息 - fut_code: {fut_code}, trade_date: {trade_date}, file_name: {file_name}")
@@ -215,7 +217,8 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
     # 检查文件是否存在
     if not os.path.exists(file_name):
         print(f"错误：文件不存在 - {file_name}")
-        return None
+        logger.error(f"无法找到合约文件: {file_name}")
+        sys.exit(1)
     
     # 读取文件并查找匹配的数据行
     matched_rows = []
@@ -236,8 +239,11 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
     
     # 处理查找结果
     if len(matched_rows) == 0:
-        # 未找到数据，打印头三行信息
-        print(f"未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})")
+        # 未找到数据，打印头三行信息并终止程序
+        error_msg = f"错误：未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})
+无法从mapping文件中获取对应的日线数据，程序终止。"
+        print(error_msg)
+        logger.error(error_msg)
         
         # 打印文件的头三行信息
         print("文件头三行信息：")
@@ -257,14 +263,16 @@ def get_day_kline_from_csv(fut_code, trade_date, file_name):
         except Exception as e:
             print(f"读取文件头部信息时出错: {e}")
         
-        return None
+        sys.exit(1)
     
     elif len(matched_rows) > 1:
-        # 找到多行数据，打印并报错
-        print(f"错误：找到多行匹配的数据 ({len(matched_rows)}行)")
+        # 找到多行数据，打印并报错终止程序
+        error_msg = f"错误：找到多行匹配的数据 ({len(matched_rows)}行)"
+        print(error_msg)
+        logger.error(error_msg)
         for i, row in enumerate(matched_rows):
             print(f"第{i+1}行匹配数据: {row}")
-        return None
+        sys.exit(1)
     
     else:
         # 正常情况：找到且只有一行数据
