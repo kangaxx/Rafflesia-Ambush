@@ -10,8 +10,7 @@ import argparse
 import os
 import sys
 import logging
-from datetime import datetime
-import tushare as ts
+import re
 
 # 配置日志
 logging.basicConfig(
@@ -25,38 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _read_tushare_token():
-    """从key.json文件中读取token"""
-    try:
-        # 获取当前脚本所在目录
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        # 构建key.json文件的完整路径
-        key_json_path = os.path.join(script_dir, 'key.json')
-        
-        # 检查文件是否存在
-        if not os.path.exists(key_json_path):
-            logger.error(f"配置文件 key.json 不存在，请在 {key_json_path} 创建配置文件")
-            raise FileNotFoundError(f"配置文件 key.json 不存在")
-        
-        # 读取JSON文件
-        import json
-        with open(key_json_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        
-        # 尝试多种可能的键名
-        token = config.get('token') or config.get('TUSHARE_TOKEN') or config.get('tushare_token')
-        
-        if not token:
-            logger.error("key.json文件中未找到有效的token")
-            raise ValueError("token未找到，请在key.json中设置正确的token")
-        
-        return token
-    except json.JSONDecodeError as e:
-        logger.error(f"解析key.json文件失败: {e}")
-        raise ValueError(f"key.json文件格式错误: {e}")
-    except Exception as e:
-        logger.error(f"读取token时发生错误: {e}")
-        raise
+
 
 
 def create_main_index(fut_code, mapping_file, contract_path=None, output_path=None):
@@ -73,17 +41,13 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
         bool: 创建是否成功
     """
     try:
-        # 初始化Tushare API
-        token = _read_tushare_token()
-        pro = ts.pro_api(token)
-        
-        logger.info(f"开始创建主连指数数据: 合约={fut_code}, 映射文件={mapping_file}")
-        
         # 解析期货代码获取品种和交易所
         # 格式应为 "品种.交易所"，如 "RB.SHF"
         if '.' not in fut_code:
             logger.error(f"合约编码格式错误，应为'品种.交易所'格式，如'RB.SHF'")
             raise ValueError("合约编码格式错误")
+        
+        logger.info(f"开始创建主连指数数据: 合约={fut_code}, 映射文件={mapping_file}")
         
         # 读取映射文件
         import pandas as pd
@@ -115,34 +79,46 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
             ts_code = row['mapping_ts_code']
             
             try:
-                # 首先尝试从合约文件路径读取数据（如果指定了路径）
                 df = None
+                # 仅从合约文件路径读取数据（如果指定了路径）
                 if contract_path is not None and os.path.exists(contract_path):
-                    # 构建合约文件名，假设文件名为ts_code.csv格式
-                    contract_file = os.path.join(contract_path, f"{ts_code}.csv")
-                    if os.path.exists(contract_file):
-                        logger.info(f"从合约文件 {contract_file} 读取数据")
-                        try:
-                            import pandas as pd
-                            df = pd.read_csv(contract_file)
-                            # 查找指定交易日的数据
-                            df = df[df['trade_date'] == trade_date]
-                        except Exception as e:
-                            logger.error(f"读取合约文件 {contract_file} 时出错: {e}")
-                            df = None
-                    else:
-                        logger.warning(f"合约文件不存在: {contract_file}")
+                    # 提取基础品种代码（不含交易所）
+                    base_code = fut_code.split('.')[0]
+                    
+                    # 从ts_code提取年份和月份
+                    # 假设ts_code格式为：RB2401.SHF 或类似格式
+                    try:
+                        # 提取合约月份信息，如从RB2401.SHF中提取2401
+                        # 先尝试匹配常见的合约代码格式
+                        import re
+                        match = re.search(r'\d{4}', ts_code)
+                        if match:
+                            year_month = match.group()
+                            # 构建文件名：fut_code + YY + MM + '.csv'
+                            # 例如：RB.SHF2401.csv
+                            contract_file_name = f"{base_code}{year_month}.csv"
+                            contract_file = os.path.join(contract_path, contract_file_name)
+                            
+                            logger.info(f"从合约文件 {contract_file} 读取数据")
+                            if os.path.exists(contract_file):
+                                df = pd.read_csv(contract_file)
+                                # 查找指定交易日的数据
+                                df = df[df['trade_date'] == trade_date]
+                                logger.info(f"成功从文件读取到 {trade_date} 的数据")
+                            else:
+                                logger.warning(f"合约文件不存在: {contract_file}")
+                        else:
+                            logger.warning(f"无法从ts_code {ts_code} 中提取年月信息")
+                    except Exception as e:
+                        logger.error(f"解析合约代码时出错: {e}")
                 
-                # 如果从文件未获取到数据，则使用Tushare API获取
+                # 如果从文件未获取到数据，则记录警告
                 if df is None or df.empty:
-                    logger.info(f"获取合约 {ts_code} 在 {trade_date} 的数据")
-                    # 获取该合约的日线数据
-                    df = pro.fut_daily(
-                        ts_code=ts_code,
-                        trade_date=trade_date
-                    )
+                    logger.warning(f"未获取到合约 {ts_code} 在 {trade_date} 的数据")
+                    continue
                 
-                if not df.empty:
+                # 如果成功读取到数据，添加到主连数据中
+                if df is not None and not df.empty:
                     # 提取所需数据并添加到主连数据中
                     for _, daily_row in df.iterrows():
                         # 创建主连数据记录，保留原始数据的大部分字段
@@ -150,8 +126,6 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                         # 添加主连合约标识
                         main_index_record['main_contract'] = fut_code
                         main_index_data.append(main_index_record)
-                else:
-                    logger.warning(f"未获取到合约 {ts_code} 在 {trade_date} 的数据")
                     
             except Exception as e:
                 logger.error(f"处理合约 {ts_code} 在 {trade_date} 时出错: {e}")
@@ -203,7 +177,7 @@ def parse_arguments():
 # 使用所有默认路径创建螺纹钢主连指数数据
 python create_main_index_by_tushare.py -c RB.SHF
 
-# 使用自定义映射文件路径和默认合约文件集路径创建主连指数数据
+# 使用自定义映射文件路径创建主连指数数据
 python create_main_index_by_tushare.py -c RB.SHF -m custom_path/RB.SHF_fut_mapping.csv
 
 # 使用自定义映射文件路径和自定义合约文件集路径创建主连指数数据
