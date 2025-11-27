@@ -156,13 +156,17 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                 if output_dir:
                     os.makedirs(output_dir, exist_ok=True)
             else:
+                # 从default_param_list.json中读取main_index参数
+                with open('default_param_list.json', 'r') as f:
+                    params = json.load(f)
+                main_index_file = params.get('main_index', '_main_index.csv')
                 # 检查路径是否已存在且是一个目录
                 if os.path.exists(output_path) and os.path.isdir(output_path):
                     # 如果是目录，则拼接文件名
-                    save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
+                    save_path = os.path.join(output_path, f"{fut_code}{main_index_file}")
                 else:
                     # 如果不是目录或者不存在，则将其视为目录路径
-                    save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
+                    save_path = os.path.join(output_path, f"{fut_code}{main_index_file}")
                     # 确保输出目录存在
                     os.makedirs(output_path, exist_ok=True)
             logger.info(f"准备将主连指数数据保存至: {save_path}")
