@@ -104,22 +104,18 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                             contract_file = os.path.join(contract_path, contract_file_name)
                             
                             logger.info(f"尝试读取合约文件: {contract_file}")
-                            if os.path.exists(contract_file):
-                                # 先完整读取数据框，避免多次过滤后数据丢失
-                                original_df = pd.read_csv(contract_file)
-                                # 注意：文件内的ts_code可能带有.SHF后缀
-                                # 需要同时匹配ts_code和trade_date两列
-                                # 构建完整的合约代码（带交易所后缀）用于匹配
-                                full_ts_code = f"{base_code}{year_month}.{exchange}"
-                                # 先尝试精确匹配带交易所后缀的ts_code
-                                df = original_df[(original_df['ts_code'] == full_ts_code) & (original_df['trade_date'] == trade_date)]
-                                
-                                # 如果没有找到匹配项，可能ts_code不带后缀，尝试只根据trade_date过滤
-                                if df.empty:
-                                    df = original_df[original_df['trade_date'] == trade_date]
-                                    logger.info(f"通过trade_date过滤获取到 {trade_date} 的数据")
-                                else:
-                                    logger.info(f"成功通过ts_code和trade_date匹配获取到 {trade_date} 的数据")
+                            # 构建完整的合约代码（带交易所后缀）用于匹配
+                            full_ts_code = f"{base_code}{year_month}.{exchange}"
+                            # 使用新的get_day_kline_from_csv函数获取数据
+                            # 注意：函数期望的参数顺序是fut_code, trade_date, file_name
+                            row_data = get_day_kline_from_csv(full_ts_code, trade_date, contract_file)
+                            
+                            if row_data:
+                                # 如果成功获取到数据，转换为DataFrame
+                                df = pd.DataFrame([row_data])
+                            else:
+                                # 没有获取到数据
+                                df = pd.DataFrame()
                             else:
                                 # 注意：按照要求，合约的编号应该是RB0909这种不带.SHF的格式
                                 # 只使用基础格式，不再尝试其他格式
@@ -205,6 +201,81 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
         raise
 
 
+def get_day_kline_from_csv(fut_code, trade_date, file_name):
+    """
+    从CSV文件中获取指定合约和日期的日线K线数据
+    
+    Args:
+        fut_code: 合约代码
+        trade_date: 交易日期
+        file_name: CSV文件路径
+    
+    Returns:
+        dict: 找到的一行数据（如果有且只有一行），否则返回None
+    """
+    # 打印输入参数
+    print(f"参数信息 - fut_code: {fut_code}, trade_date: {trade_date}, file_name: {file_name}")
+    
+    # 检查文件是否存在
+    if not os.path.exists(file_name):
+        print(f"错误：文件不存在 - {file_name}")
+        return None
+    
+    # 读取文件并查找匹配的数据行
+    matched_rows = []
+    headers = None
+    try:
+        with open(file_name, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+            
+            for row in reader:
+                # 检查fut_code和trade_date是否匹配
+                if ('fut_code' in row and row['fut_code'] == fut_code and 
+                    'trade_date' in row and row['trade_date'] == trade_date):
+                    matched_rows.append(row)
+    except Exception as e:
+        print(f"读取文件时出错: {e}")
+        return None
+    
+    # 处理查找结果
+    if len(matched_rows) == 0:
+        # 未找到数据，打印头三行信息
+        print(f"未找到匹配的数据行 (fut_code={fut_code}, trade_date={trade_date})")
+        
+        # 打印文件的头三行信息
+        print("文件头三行信息：")
+        try:
+            with open(file_name, 'r', encoding='utf-8') as f:
+                # 打印表头
+                if headers:
+                    print(f"表头: {','.join(headers)}")
+                # 打印前两行数据
+                line_count = 0
+                for line in f:
+                    if line_count <= 2:  # 包括表头在内的前三行
+                        print(f"第{line_count+1}行: {line.strip()}")
+                    else:
+                        break
+                    line_count += 1
+        except Exception as e:
+            print(f"读取文件头部信息时出错: {e}")
+        
+        return None
+    
+    elif len(matched_rows) > 1:
+        # 找到多行数据，打印并报错
+        print(f"错误：找到多行匹配的数据 ({len(matched_rows)}行)")
+        for i, row in enumerate(matched_rows):
+            print(f"第{i+1}行匹配数据: {row}")
+        return None
+    
+    else:
+        # 正常情况：找到且只有一行数据
+        print("成功找到唯一匹配的数据行")
+        return matched_rows[0]
+
+
 def parse_arguments():
     """
     解析命令行参数
@@ -225,8 +296,7 @@ python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_file
 # 使用所有自定义路径创建主连指数数据
 # 主连数据将保存至: output_data/RB.SHF_main_index.csv
 python create_main_index_by_tushare.py -c RB.SHF -m mapping.csv -p contract_files/ -o output_data/
-"""
-    )
+""")
     
     # 添加带单字母模式的合约编码参数
     parser.add_argument('-c', '--fut_code', type=str, required=True, help='合约编码，如 RB.SHF')
