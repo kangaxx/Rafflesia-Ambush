@@ -146,15 +146,32 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
         
         # 构建保存路径
         if output_path is not None:
-            # 直接使用output_path参数值 + fut_code + '_main_index.csv'
-            save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
-            # 确保输出目录存在
-            os.makedirs(output_path, exist_ok=True)
+            # 确保output_path被处理为目录路径
+            # 检查是否已经是文件名（包含.csv扩展名）
+            if os.path.splitext(output_path)[1] == '.csv':
+                # 如果output_path已经是文件名，则直接使用
+                save_path = output_path
+                # 确保目录存在
+                output_dir = os.path.dirname(save_path)
+                if output_dir:
+                    os.makedirs(output_dir, exist_ok=True)
+            else:
+                # 检查路径是否已存在且是一个目录
+                if os.path.exists(output_path) and os.path.isdir(output_path):
+                    # 如果是目录，则拼接文件名
+                    save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
+                else:
+                    # 如果不是目录或者不存在，则将其视为目录路径
+                    save_path = os.path.join(output_path, f"{fut_code}_main_index.csv")
+                    # 确保输出目录存在
+                    os.makedirs(output_path, exist_ok=True)
+            logger.info(f"准备将主连指数数据保存至: {save_path}")
         else:
             # 使用默认路径
             save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'main_index_data')
             os.makedirs(save_dir, exist_ok=True)
             save_path = os.path.join(save_dir, f"{fut_code}_main_index.csv")
+            logger.info(f"使用默认路径，将主连指数数据保存至: {save_path}")
         df.to_csv(save_path, index=False, encoding='utf-8')
         
         logger.info(f"主连指数数据已保存至: {save_path}")
