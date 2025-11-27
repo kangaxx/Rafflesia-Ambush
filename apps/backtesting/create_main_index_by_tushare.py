@@ -81,12 +81,27 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
             try:
                 df = None
                 # 仅从合约文件路径读取数据（如果指定了路径）
-                if contract_path is not None and os.path.exists(contract_path):
+                print(f"[调试] 检查合约路径: contract_path={contract_path}")
+                logger.info(f"检查合约路径: contract_path={contract_path}")
+                
+                if contract_path is None:
+                    print(f"[错误] 合约路径未指定 (contract_path is None)")
+                    logger.error(f"合约路径未指定，无法获取合约数据")
+                elif not os.path.exists(contract_path):
+                    print(f"[错误] 合约路径不存在: {contract_path}")
+                    logger.error(f"合约路径不存在: {contract_path}")
+                else:
+                    print(f"[确认] 合约路径存在: {contract_path}")
+                    logger.info(f"合约路径验证通过: {contract_path}")
+                    
                     # 提取基础品种代码（不含交易所）
                     base_code = fut_code.split('.')[0]
+                    exchange = fut_code.split('.')[1]  # 提取交易所代码
+                    print(f"[调试] 提取品种代码: base_code={base_code}, exchange={exchange}")
                     
                     # 从ts_code提取年份和月份
                     # 假设ts_code格式为：RB2401.SHF 或类似格式
+                    print(f"[调试] 尝试从ts_code提取年月: ts_code={ts_code}")
                     try:
                         # 提取合约月份信息，如从RB2401.SHF中提取2401
                         # 先尝试匹配常见的合约代码格式
@@ -94,36 +109,55 @@ def create_main_index(fut_code, mapping_file, contract_path=None, output_path=No
                         match = re.search(r'\d{4}', ts_code)
                         if match:
                             year_month = match.group()
-                            # 构建文件名：fut_code + YY + MM + '.csv'
-                            # 例如：RB.SHF2401.csv
-                            # 提取交易所代码
-                            exchange = fut_code.split('.')[1]
+                            print(f"[成功] 提取到年月信息: {year_month}")
                             
-                            # 尝试基础格式: 品种+年月.csv (如RB0909.csv)
+                            # 构建文件名：品种+年月.csv (如RB0909.csv)
                             contract_file_name = f"{base_code}{year_month}.csv"
                             contract_file = os.path.join(contract_path, contract_file_name)
                             
+                            print(f"[调试] 构建合约文件路径: {contract_file}")
                             logger.info(f"尝试读取合约文件: {contract_file}")
-                            # 构建完整的合约代码（带交易所后缀）用于匹配
-                            full_ts_code = f"{base_code}{year_month}.{exchange}"
-                            # 使用新的get_day_kline_from_csv函数获取数据
-                            # 注意：函数期望的参数顺序是fut_code, trade_date, file_name
-                            row_data = get_day_kline_from_csv(full_ts_code, trade_date, contract_file)
                             
-                            if row_data:
-                                # 如果成功获取到数据，转换为DataFrame
-                                df = pd.DataFrame([row_data])
+                            # 检查文件是否存在
+                            if not os.path.exists(contract_file):
+                                print(f"[严重错误] 合约文件不存在: {contract_file}")
+                                logger.error(f"合约文件不存在: {contract_file}")
                             else:
-                                # 没有获取到数据
-                                df = pd.DataFrame()
+                                print(f"[确认] 合约文件存在: {contract_file}")
+                                
+                                # 构建完整的合约代码（带交易所后缀）用于匹配
+                                full_ts_code = f"{base_code}{year_month}.{exchange}"
+                                print(f"[调试] 构建完整合约代码: full_ts_code={full_ts_code}")
+                                
+                                # 使用新的get_day_kline_from_csv函数获取数据
+                                print(f"[开始] 调用get_day_kline_from_csv函数")
+                                row_data = get_day_kline_from_csv(full_ts_code, trade_date, contract_file)
+                                
+                                if row_data:
+                                    # 如果成功获取到数据，转换为DataFrame
+                                    df = pd.DataFrame([row_data])
+                                    print(f"[成功] 从函数获取到数据并创建DataFrame")
+                                else:
+                                    # 没有获取到数据
+                                    print(f"[警告] 函数返回空数据")
+                                    df = pd.DataFrame()
                         else:
+                            print(f"[错误] 无法从ts_code {ts_code} 中提取年月信息")
                             logger.warning(f"无法从ts_code {ts_code} 中提取年月信息")
                     except Exception as e:
                         logger.error(f"解析合约代码时出错: {e}")
                 
                 # 如果从文件未获取到数据，则记录警告
-                if df is None or df.empty:
-                    logger.warning(f"未获取到合约 {ts_code} 在 {trade_date} 的数据")
+                print(f"[调试] 最终检查数据: df={df}")
+                if df is None:
+                    error_msg = f"[严重错误] 数据帧为None，无法获取合约 {ts_code} 在 {trade_date} 的数据"
+                    print(error_msg)
+                    logger.error(error_msg)
+                    return
+                elif df.empty:
+                    error_msg = f"[严重错误] 数据帧为空，未获取到合约 {ts_code} 在 {trade_date} 的数据"
+                    print(error_msg)
+                    logger.error(error_msg)
                     return
                 
                 # 如果成功读取到数据，添加到主连数据中
