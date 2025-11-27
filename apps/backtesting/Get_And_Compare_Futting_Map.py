@@ -157,10 +157,10 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
     """
     logger.info(f"获取期货产品 {fut_code} 的映射信息")
     
-    # 解析期货代码和交易所代码
+    # 验证期货代码格式（保持格式验证，确保代码有效）
     try:
         symbol, exchange = fut_code.split('.')
-        logger.info(f"解析得到：品种={symbol}, 交易所={exchange}")
+        logger.info(f"验证期货代码格式：品种={symbol}, 交易所={exchange}")
     except ValueError:
         logger.error(f"无效的期货产品代码格式：{fut_code}，应为'品种.交易所'格式")
         raise ValueError(f"无效的期货产品代码格式：{fut_code}，应为'品种.交易所'格式")
@@ -177,8 +177,8 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
         pro = ts.pro_api()
         logger.info("成功初始化tushare API")
         
-        # 调用fut_mapping接口获取期货映射数据
-        logger.info(f"调用tushare fut_mapping接口，获取 {symbol} 在 {exchange} 的映射数据")
+        # 调用tushare fut_mapping接口获取期货映射数据
+        logger.info(f"调用tushare fut_mapping接口，获取 {fut_code} 的映射数据")
         
         # 调用API，使用正确的参数
         df = pro.fut_mapping(
