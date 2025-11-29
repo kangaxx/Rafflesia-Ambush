@@ -418,6 +418,18 @@ def main():
     主函数
     """
     try:
+        # 加载默认配置文件
+        import json
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_param_list.json')
+        
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                default_config = json.load(f)
+            logger.info(f"成功加载默认配置文件: {config_path}")
+        else:
+            logger.warning(f"默认配置文件不存在: {config_path}，使用默认值")
+            default_config = {}
+        
         # 解析命令行参数
         args = parse_arguments()
         
@@ -450,6 +462,27 @@ def main():
             # 检查合约文件路径是否存在
             if not os.path.exists(contract_path):
                 logger.warning(f"指定的普通合约文件集路径不存在: {contract_path}")
+        else:
+            # 如果未指定合约路径，使用配置文件中的默认路径
+            if 'tushare_root' in default_config and 'future' in default_config and '1d' in default_config:
+                # 构建默认合约路径
+                tushare_root = os.path.expanduser(default_config['tushare_root'])  # 展开~到用户目录
+                future_path = default_config['future']
+                time_level = default_config['1d']
+                
+                contract_path = os.path.join(tushare_root, future_path.strip('/'), time_level.strip('/'))
+                logger.info(f"使用配置文件中的默认合约路径: {contract_path}")
+                
+                # 在Windows系统上，将Linux路径格式转换为Windows格式
+                if sys.platform == 'win32':
+                    contract_path = contract_path.replace('/', '\\')
+                
+                # 检查默认合约路径是否存在
+                if not os.path.exists(contract_path):
+                    logger.warning(f"默认合约路径不存在: {contract_path}")
+            else:
+                logger.warning("配置文件中缺少必要的路径配置，使用None作为合约路径")
+                contract_path = None
         
         # 处理第四个参数：主力合约数据存储路径
         output_path = args.output_path
