@@ -11,6 +11,7 @@ import os
 import sys
 import logging
 import re
+from typing import Dict, Optional
 
 # 配置日志
 logging.basicConfig(
@@ -22,6 +23,76 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+def _read_params_and_create_directories(config_path: Optional[str] = None) -> Dict[str, str]:
+    """
+    私有函数：从default_param_list.json读取参数并创建必要的目录
+    
+    Args:
+        config_path: 配置文件路径，如果为None则使用默认路径
+    
+    Returns:
+        Dict[str, str]: 包含配置参数的字典
+    """
+    # 如果未指定配置文件路径，使用默认路径
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_param_list.json')
+    
+    try:
+        # 读取配置文件
+        with open(config_path, 'r', encoding='utf-8') as f:
+            params = json.load(f)
+        logger.info(f"成功加载配置文件: {config_path}")
+        
+        # 获取tushare_root路径
+        tushare_root = params.get('tushare_root', '~/data_server/share_path/.tushare')
+        # 展开路径中的波浪号
+        tushare_root_expanded = os.path.expanduser(tushare_root)
+        
+        # 检查并创建tushare_root目录
+        if not os.path.exists(tushare_root_expanded):
+            logger.info(f"创建tushare_root目录: {tushare_root_expanded}")
+            os.makedirs(tushare_root_expanded, exist_ok=True)
+        else:
+            logger.info(f"tushare_root目录已存在: {tushare_root_expanded}")
+        
+        # 需要检查和创建的子目录列表
+        subdirs_to_check = ['future', 'index', 'calendar', 'driver', 'calibrated']
+        
+        # 检查并创建每个子目录
+        for subdir_key in subdirs_to_check:
+            if subdir_key in params:
+                subdir_path = params[subdir_key]
+                # 移除开头的斜杠以确保正确拼接
+                if subdir_path.startswith('/'):
+                    subdir_path = subdir_path[1:]
+                
+                # 构建完整路径
+                full_path = os.path.join(tushare_root_expanded, subdir_path)
+                
+                # 在Windows系统上转换路径格式
+                if sys.platform == 'win32':
+                    full_path = full_path.replace('/', '\\')
+                
+                # 检查并创建目录
+                if not os.path.exists(full_path):
+                    logger.info(f"创建子目录: {full_path}")
+                    os.makedirs(full_path, exist_ok=True)
+                else:
+                    logger.info(f"子目录已存在: {full_path}")
+            else:
+                logger.warning(f"配置文件中未找到{subdir_key}配置项")
+        
+        return params
+    except FileNotFoundError:
+        logger.error(f"配置文件不存在: {config_path}")
+        return {}
+    except json.JSONDecodeError:
+        logger.error(f"配置文件格式错误: {config_path}")
+        return {}
+    except Exception as e:
+        logger.error(f"读取配置文件并创建目录时出错: {e}")
+        return {}
 
 
 
@@ -418,17 +489,8 @@ def main():
     主函数
     """
     try:
-        # 加载默认配置文件
-        import json
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_param_list.json')
-        
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                default_config = json.load(f)
-            logger.info(f"成功加载默认配置文件: {config_path}")
-        else:
-            logger.warning(f"默认配置文件不存在: {config_path}，使用默认值")
-            default_config = {}
+        # 使用私有函数加载配置并创建必要的目录
+        default_config = _read_params_and_create_directories()
         
         # 解析命令行参数
         args = parse_arguments()
