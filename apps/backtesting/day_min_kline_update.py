@@ -80,6 +80,68 @@ def load_config(config_path):
         logger.warning(f"配置文件不存在: {full_config_path}，使用默认配置")
         return {}
 
+def check_and_create_tushare_root(config_path='default_param_list.json'):
+    """
+    读取配置文件，获取并检查tushare_root路径
+    若路径不存在则创建
+    
+    Args:
+        config_path: 配置文件路径，默认为同目录下的default_param_list.json
+    
+    Returns:
+        str: tushare_root的绝对路径
+    """
+    try:
+        # 获取脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # 构建完整的配置文件路径
+        full_config_path = os.path.join(script_dir, config_path)
+        
+        # 读取配置文件
+        if os.path.exists(full_config_path):
+            with open(full_config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 获取tushare_root配置，默认为~/.tushare
+            tushare_root = config.get('tushare_root', '~/.tushare')
+            logger.info(f"从配置文件读取到tushare_root: {tushare_root}")
+            print(f"tushare_root值: {tushare_root}")
+            
+            # 展开路径（处理~符号）
+            expanded_path = os.path.expanduser(tushare_root)
+            
+            # 确保路径格式适合当前操作系统
+            if sys.platform == 'win32':
+                expanded_path = expanded_path.replace('/', '\\')
+            
+            # 检查路径是否存在，不存在则创建
+            if not os.path.exists(expanded_path):
+                logger.info(f"tushare_root路径不存在，正在创建: {expanded_path}")
+                os.makedirs(expanded_path, exist_ok=True)
+                logger.info(f"成功创建tushare_root路径: {expanded_path}")
+            else:
+                logger.info(f"tushare_root路径已存在: {expanded_path}")
+            
+            return expanded_path
+        else:
+            logger.warning(f"配置文件不存在: {full_config_path}")
+            # 使用默认路径
+            default_path = os.path.expanduser('~/.tushare')
+            if sys.platform == 'win32':
+                default_path = default_path.replace('/', '\\')
+            print(f"使用默认tushare_root值: {default_path}")
+            
+            # 检查并创建默认路径
+            if not os.path.exists(default_path):
+                logger.info(f"默认tushare_root路径不存在，正在创建: {default_path}")
+                os.makedirs(default_path, exist_ok=True)
+            
+            return default_path
+            
+    except Exception as e:
+        logger.error(f"检查并创建tushare_root路径时出错: {e}")
+        raise
+
 def update_kline_data(contract, data_type, config):
     """
     更新指定合约的K线数据
@@ -154,6 +216,9 @@ def main():
     try:
         # 解析命令行参数
         args = parse_arguments()
+        
+        # 检查并创建tushare_root目录
+        tushare_root = check_and_create_tushare_root(args.config)
         
         # 加载配置文件
         config = load_config(args.config)
