@@ -80,6 +80,49 @@ def load_config(config_path):
         logger.warning(f"配置文件不存在: {full_config_path}，使用默认配置")
         return {}
 
+def call_futting_map_script(fut_code, save_path):
+    """
+    调用Get_And_Compare_Futting_Map.py脚本获取期货映射信息
+    
+    Args:
+        fut_code: 期货合约代码
+        save_path: 保存路径
+    
+    Returns:
+        bool: 调用是否成功
+    """
+    import subprocess
+    
+    try:
+        # 获取脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # 构建完整的脚本路径
+        map_script_path = os.path.join(script_dir, 'Get_And_Compare_Futting_Map.py')
+        
+        logger.info(f"准备调用期货映射脚本，合约代码: {fut_code}，保存路径: {save_path}")
+        
+        # 构建命令参数
+        cmd = [sys.executable, map_script_path, '-c', fut_code, '-s', save_path]
+        
+        # 执行命令
+        logger.info(f"执行命令: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        
+        # 检查执行结果
+        if result.returncode == 0:
+            logger.info(f"期货映射脚本调用成功: {fut_code}")
+            logger.debug(f"脚本输出: {result.stdout}")
+            return True
+        else:
+            logger.error(f"期货映射脚本调用失败: {fut_code}")
+            logger.error(f"错误信息: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"调用期货映射脚本时发生异常: {str(e)}")
+        return False
+
+
 def check_and_create_tushare_root(config_path='default_param_list.json'):
     """
     读取配置文件，获取并检查tushare_root路径及其子路径
@@ -327,7 +370,32 @@ def main():
         contracts = [c.strip() for c in args.contracts.split(',')]
         logger.info(f"需要更新的合约列表: {contracts}")
         
+        # 构建index目录作为save_path
+        index_path = config.get('index', '/data/raw/index')
+        save_path = os.path.join(tushare_root, index_path.lstrip('/'))
+        if sys.platform == 'win32':
+            save_path = save_path.replace('/', '\\')
+        logger.info(f"使用index目录作为保存路径: {save_path}")
+        
+        # 遍历合约列表，调用期货映射脚本
+        logger.info("开始调用期货映射脚本处理合约...")
+        map_success_count = 0
+        map_fail_count = 0
+        
+        for contract in contracts:
+            logger.info(f"处理合约: {contract}")
+            if call_futting_map_script(contract, save_path):
+                map_success_count += 1
+                logger.info(f"合约 {contract} 映射处理成功")
+            else:
+                map_fail_count += 1
+                logger.error(f"合约 {contract} 映射处理失败")
+        
+        # 输出映射处理汇总信息
+        logger.info(f"期货映射处理汇总 - 成功: {map_success_count}, 失败: {map_fail_count}, 总计: {len(contracts)}")
+        
         # 遍历合约列表并更新数据
+        logger.info("开始更新K线数据...")
         success_count = 0
         fail_count = 0
         
@@ -337,14 +405,16 @@ def main():
             else:
                 fail_count += 1
         
-        # 输出汇总信息
+        # 输出数据更新汇总信息
         logger.info(f"数据更新汇总 - 成功: {success_count}, 失败: {fail_count}, 总计: {len(contracts)}")
         
-        if fail_count > 0:
-            logger.warning("部分合约数据更新失败")
+        # 综合判断退出状态
+        total_fail = map_fail_count + fail_count
+        if total_fail > 0:
+            logger.warning(f"处理过程中存在失败项: 映射失败 {map_fail_count} 个, 数据更新失败 {fail_count} 个")
             sys.exit(1)
         else:
-            logger.info("所有合约数据更新成功")
+            logger.info("所有合约处理成功完成")
             sys.exit(0)
             
     except KeyboardInterrupt:
