@@ -82,7 +82,7 @@ def load_config(config_path):
 
 def check_and_create_tushare_root(config_path='default_param_list.json'):
     """
-    读取配置文件，获取并检查tushare_root路径
+    读取配置文件，获取并检查tushare_root路径及其子路径
     若路径不存在则创建
     
     Args:
@@ -108,38 +108,83 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
             print(f"tushare_root值: {tushare_root}")
             
             # 展开路径（处理~符号）
-            expanded_path = os.path.expanduser(tushare_root)
+            expanded_root = os.path.expanduser(tushare_root)
             
             # 确保路径格式适合当前操作系统
             if sys.platform == 'win32':
-                expanded_path = expanded_path.replace('/', '\\')
+                expanded_root = expanded_root.replace('/', '\\')
             
-            # 检查路径是否存在，不存在则创建
-            if not os.path.exists(expanded_path):
-                logger.info(f"tushare_root路径不存在，正在创建: {expanded_path}")
-                os.makedirs(expanded_path, exist_ok=True)
-                logger.info(f"成功创建tushare_root路径: {expanded_path}")
+            # 检查tushare_root路径是否存在，不存在则创建
+            if not os.path.exists(expanded_root):
+                logger.info(f"tushare_root路径不存在，正在创建: {expanded_root}")
+                os.makedirs(expanded_root, exist_ok=True)
+                logger.info(f"成功创建tushare_root路径: {expanded_root}")
             else:
-                logger.info(f"tushare_root路径已存在: {expanded_path}")
+                logger.info(f"tushare_root路径已存在: {expanded_root}")
             
-            return expanded_path
+            # 需要创建的子路径配置键
+            subpath_keys = ['future', 'index', 'calendar', 'driver', 'calibrated']
+            
+            # 处理每个子路径
+            for key in subpath_keys:
+                if key in config:
+                    subpath = config[key]
+                    print(f"{key}值: {subpath}")
+                    
+                    # 构建完整路径（去除开头的/，避免路径拼接错误）
+                    full_path = os.path.join(expanded_root, subpath.lstrip('/'))
+                    
+                    # 确保路径格式适合当前操作系统
+                    if sys.platform == 'win32':
+                        full_path = full_path.replace('/', '\\')
+                    
+                    # 检查路径是否存在，不存在则创建
+                    if not os.path.exists(full_path):
+                        logger.info(f"{key}路径不存在，正在创建: {full_path}")
+                        os.makedirs(full_path, exist_ok=True)
+                        logger.info(f"成功创建{key}路径: {full_path}")
+                    else:
+                        logger.info(f"{key}路径已存在: {full_path}")
+                else:
+                    logger.warning(f"配置文件中未找到{key}路径配置")
+            
+            return expanded_root
         else:
             logger.warning(f"配置文件不存在: {full_config_path}")
             # 使用默认路径
-            default_path = os.path.expanduser('~/.tushare')
+            default_root = os.path.expanduser('~/.tushare')
             if sys.platform == 'win32':
-                default_path = default_path.replace('/', '\\')
-            print(f"使用默认tushare_root值: {default_path}")
+                default_root = default_root.replace('/', '\\')
+            print(f"使用默认tushare_root值: {default_root}")
             
             # 检查并创建默认路径
-            if not os.path.exists(default_path):
-                logger.info(f"默认tushare_root路径不存在，正在创建: {default_path}")
-                os.makedirs(default_path, exist_ok=True)
+            if not os.path.exists(default_root):
+                logger.info(f"默认tushare_root路径不存在，正在创建: {default_root}")
+                os.makedirs(default_root, exist_ok=True)
             
-            return default_path
+            # 创建默认子路径
+            default_subpaths = {
+                'future': 'data/raw/futures',
+                'index': 'data/raw/index',
+                'calendar': 'data/raw/calendar',
+                'driver': 'data/driver',
+                'calibrated': 'data/calibrated'
+            }
+            
+            for key, default_subpath in default_subpaths.items():
+                full_path = os.path.join(default_root, default_subpath)
+                if sys.platform == 'win32':
+                    full_path = full_path.replace('/', '\\')
+                print(f"使用默认{key}值: {default_subpath}")
+                
+                if not os.path.exists(full_path):
+                    logger.info(f"默认{key}路径不存在，正在创建: {full_path}")
+                    os.makedirs(full_path, exist_ok=True)
+            
+            return default_root
             
     except Exception as e:
-        logger.error(f"检查并创建tushare_root路径时出错: {e}")
+        logger.error(f"检查并创建路径时出错: {e}")
         raise
 
 def update_kline_data(contract, data_type, config):
