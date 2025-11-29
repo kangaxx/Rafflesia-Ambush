@@ -12,16 +12,25 @@ import sys
 import logging
 import json
 
+# 获取脚本所在目录
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 创建日志目录（如果不存在）
+log_dir = os.path.join(script_dir, 'log')
+os.makedirs(log_dir, exist_ok=True)
+
 # 配置日志
+log_file = os.path.join(log_dir, 'day_min_kline_update.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('log/day_min_kline_update.log'),
+        logging.FileHandler(log_file),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
+logger.info(f"日志文件路径: {log_file}")
 
 def parse_arguments():
     """
@@ -71,15 +80,13 @@ def load_config(config_path):
         logger.warning(f"配置文件不存在: {full_config_path}，使用默认配置")
         return {}
 
-def update_kline_data(contract, data_type, start_date, end_date, config):
+def update_kline_data(contract, data_type, config):
     """
     更新指定合约的K线数据
     
     Args:
         contract: 合约代码
         data_type: 数据类型 ('day', 'min', 'both')
-        start_date: 开始日期
-        end_date: 结束日期
         config: 配置字典
     
     Returns:
@@ -129,9 +136,9 @@ def update_kline_data(contract, data_type, start_date, end_date, config):
         # 示例：模拟数据更新
         print(f"[更新] 合约: {contract}")
         if update_day:
-            print(f"[更新] - 日线数据，时间范围: {start_date or '最早'} 到 {end_date or '最新'}")
+            print(f"[更新] - 日线数据")
         if update_min:
-            print(f"[更新] - 分钟线数据，时间范围: {start_date or '最早'} 到 {end_date or '最新'}")
+            print(f"[更新] - 分钟线数据")
         
         logger.info(f"合约 {contract} 的数据更新完成")
         return True
@@ -155,18 +162,12 @@ def main():
         contracts = [c.strip() for c in args.contracts.split(',')]
         logger.info(f"需要更新的合约列表: {contracts}")
         
-        # 处理结束日期为None的情况（设置为当天）
-        if args.end_date is None:
-            from datetime import datetime
-            args.end_date = datetime.now().strftime('%Y%m%d')
-            logger.info(f"未指定结束日期，使用当天日期: {args.end_date}")
-        
         # 遍历合约列表并更新数据
         success_count = 0
         fail_count = 0
         
         for contract in contracts:
-            if update_kline_data(contract, args.data_type, args.start_date, args.end_date, config):
+            if update_kline_data(contract, args.data_type, config):
                 success_count += 1
             else:
                 fail_count += 1
