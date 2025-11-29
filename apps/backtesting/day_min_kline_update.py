@@ -41,8 +41,8 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description='日线分钟线K线数据更新工具')
     
-    # 添加合约参数
-    parser.add_argument('-c', '--contracts', type=str, required=True,
+    # 添加合约参数 默认RB.SHF,AG.SHF
+    parser.add_argument('-c', '--contracts', type=str, default='RB.SHF,AG.SHF',
                         help='需要更新的合约代码，多个合约用逗号分隔，例如: "RB.SHF,HC.SHF,I.DCE"')
     
     # 添加数据类型参数
