@@ -1,5 +1,5 @@
 {
-  "tushare_root": "~/.tushare",
+  "tushare_root": "~/data_server/share_path/.tushare",
   "future": "/data/raw/futures",
   "1d": "/1d",
   "1min": "/1min",
