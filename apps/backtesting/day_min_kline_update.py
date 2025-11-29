@@ -83,7 +83,7 @@ def load_config(config_path):
 def check_and_create_tushare_root(config_path='default_param_list.json'):
     """
     读取配置文件，获取并检查tushare_root路径及其子路径
-    若路径不存在则创建
+    若路径不存在则创建，包括future目录下的1d和1min子目录
     
     Args:
         config_path: 配置文件路径，默认为同目录下的default_param_list.json
@@ -125,6 +125,9 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
             # 需要创建的子路径配置键
             subpath_keys = ['future', 'index', 'calendar', 'driver', 'calibrated']
             
+            # 存储future路径以便后续创建子目录
+            future_path = None
+            
             # 处理每个子路径
             for key in subpath_keys:
                 if key in config:
@@ -145,8 +148,37 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
                         logger.info(f"成功创建{key}路径: {full_path}")
                     else:
                         logger.info(f"{key}路径已存在: {full_path}")
+                    
+                    # 保存future路径
+                    if key == 'future':
+                        future_path = full_path
                 else:
                     logger.warning(f"配置文件中未找到{key}路径配置")
+            
+            # 在future目录下创建1d和1min子目录
+            if future_path:
+                data_subdirs = {'1d': '日线数据目录', '1min': '分钟线数据目录'}
+                for subdir_key, desc in data_subdirs.items():
+                    if subdir_key in config:
+                        data_subpath = config[subdir_key]
+                        print(f"{subdir_key}值: {data_subpath}")
+                        
+                        # 构建完整的数据子目录路径
+                        full_data_path = os.path.join(future_path, data_subpath.lstrip('/'))
+                        
+                        # 确保路径格式适合当前操作系统
+                        if sys.platform == 'win32':
+                            full_data_path = full_data_path.replace('/', '\\')
+                        
+                        # 检查路径是否存在，不存在则创建
+                        if not os.path.exists(full_data_path):
+                            logger.info(f"future下的{desc}不存在，正在创建: {full_data_path}")
+                            os.makedirs(full_data_path, exist_ok=True)
+                            logger.info(f"成功创建{desc}: {full_data_path}")
+                        else:
+                            logger.info(f"{desc}已存在: {full_data_path}")
+                    else:
+                        logger.warning(f"配置文件中未找到{subdir_key}路径配置")
             
             return expanded_root
         else:
@@ -171,6 +203,12 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
                 'calibrated': 'data/calibrated'
             }
             
+            # 存储默认future路径
+            default_future_path = os.path.join(default_root, default_subpaths['future'])
+            if sys.platform == 'win32':
+                default_future_path = default_future_path.replace('/', '\\')
+            
+            # 创建子路径
             for key, default_subpath in default_subpaths.items():
                 full_path = os.path.join(default_root, default_subpath)
                 if sys.platform == 'win32':
@@ -180,6 +218,23 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
                 if not os.path.exists(full_path):
                     logger.info(f"默认{key}路径不存在，正在创建: {full_path}")
                     os.makedirs(full_path, exist_ok=True)
+            
+            # 创建默认的future下的1d和1min子目录
+            default_data_subdirs = {
+                '1d': '1d',
+                '1min': '1min'
+            }
+            
+            for subdir_key, default_data_subpath in default_data_subdirs.items():
+                full_data_path = os.path.join(default_future_path, default_data_subpath)
+                if sys.platform == 'win32':
+                    full_data_path = full_data_path.replace('/', '\\')
+                print(f"使用默认{subdir_key}值: {default_data_subpath}")
+                
+                if not os.path.exists(full_data_path):
+                    desc = '日线数据目录' if subdir_key == '1d' else '分钟线数据目录'
+                    logger.info(f"默认future下的{desc}不存在，正在创建: {full_data_path}")
+                    os.makedirs(full_data_path, exist_ok=True)
             
             return default_root
             
