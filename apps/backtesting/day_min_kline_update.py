@@ -412,9 +412,11 @@ def get_default_fut_codes():
         # 提取fut_code字段并去重
         if 'fut_code' in df.columns:
             unique_fut_codes = df['fut_code'].dropna().unique()
+            # 为每个fut_code添加.SHF后缀
+            unique_fut_codes_with_suffix = [f"{code}.SHF" for code in unique_fut_codes]
             # 转换为逗号分隔的字符串
-            default_codes = ','.join(unique_fut_codes)
-            logger.info(f"成功获取{len(unique_fut_codes)}个去重后的期货合约代码")
+            default_codes = ','.join(unique_fut_codes_with_suffix)
+            logger.info(f"成功获取{len(unique_fut_codes_with_suffix)}个去重后的期货合约代码(已添加.SHF后缀)")
             return default_codes
         else:
             logger.error("获取的数据中不包含fut_code字段")
