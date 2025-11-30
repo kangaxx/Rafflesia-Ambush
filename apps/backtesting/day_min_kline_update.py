@@ -412,6 +412,7 @@ def download_future_daily_data(df_products, pro, config):
         
         # 获取当前系统日期（格式：YYYYMMDD）
         from datetime import datetime
+        import time
         current_date = datetime.now().strftime('%Y%m%d')
         logger.info(f"当前系统日期: {current_date}")
         
@@ -434,8 +435,16 @@ def download_future_daily_data(df_products, pro, config):
         success_count = 0
         fail_count = 0
         
-        # 遍历每个期货产品
-        for index, row in df_products.iterrows():
+        # 转换为列表，便于索引操作
+        products_list = df_products.to_dict('records')
+        total_products = len(products_list)
+        index = 0
+        
+        # 使用while循环，支持遇到频率限制时从失败位置继续
+        while index < total_products:
+            row = products_list[index]
+            retry = False
+            
             try:
                 # 获取必要的字段
                 symbol = row.get('symbol', '')
@@ -446,6 +455,7 @@ def download_future_daily_data(df_products, pro, config):
                 if not symbol or not ts_code:
                     logger.warning(f"跳过无效数据行: 缺少symbol或ts_code")
                     fail_count += 1
+                    index += 1
                     continue
                 
                 # 构建文件名和路径
@@ -465,6 +475,8 @@ def download_future_daily_data(df_products, pro, config):
                         else:
                             logger.info(f"产品 {symbol} 已退市，文件已存在，跳过下载")
                             success_count += 1
+                            index += 1
+                            continue
                     else:
                         # 未退市产品，直接下载
                         need_download = True
@@ -478,29 +490,55 @@ def download_future_daily_data(df_products, pro, config):
                 if need_download:
                     # 使用fut_daily下载日k线数据
                     logger.info(f"正在下载 {symbol} 的日k线数据")
-                    daily_df = pro.fut_daily(
-                        ts_code=ts_code,
-                        fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
-                    )
-                    
-                    if daily_df is not None and not daily_df.empty:
-                        # 按trade_date升序排序
-                        daily_df = daily_df.sort_values('trade_date')
+                    try:
+                        daily_df = pro.fut_daily(
+                            ts_code=ts_code,
+                            fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
+                        )
                         
-                        # 保存到CSV文件
-                        daily_df.to_csv(file_path, index=False, encoding='utf-8')
-                        logger.info(f"成功下载 {symbol} 的日k线数据，已保存到: {file_path}")
-                        success_count += 1
-                    else:
-                        logger.warning(f"未获取到 {symbol} 的日k线数据")
-                        fail_count += 1
-                        
+                        if daily_df is not None and not daily_df.empty:
+                            # 按trade_date升序排序
+                            daily_df = daily_df.sort_values('trade_date')
+                            
+                            # 保存到CSV文件
+                            daily_df.to_csv(file_path, index=False, encoding='utf-8')
+                            logger.info(f"成功下载 {symbol} 的日k线数据，已保存到: {file_path}")
+                            success_count += 1
+                        else:
+                            logger.warning(f"未获取到 {symbol} 的日k线数据")
+                            fail_count += 1
+                    except Exception as api_error:
+                        # 检查是否是频率限制错误
+                        error_msg = str(api_error)
+                        if "您每分钟最多访问该接口" in error_msg:
+                            # 提取每分钟限制次数
+                            import re
+                            match = re.search(r'您每分钟最多访问该接口(\d+)次', error_msg)
+                            limit_count = match.group(1) if match else '未知'
+                            logger.warning(f"遇到API频率限制：每分钟最多访问该接口{limit_count}次")
+                            logger.info(f"暂停一分钟后从当前位置继续下载...")
+                            # 暂停一分钟
+                            time.sleep(60)
+                            # 不增加index，下次循环继续处理当前合约
+                            retry = True
+                        else:
+                            # 其他API错误
+                            logger.error(f"调用tushare API时发生异常: {api_error}")
+                            fail_count += 1
             except Exception as e:
                 logger.error(f"处理产品数据时发生异常: {e}")
                 fail_count += 1
+            
+            # 如果没有遇到需要重试的频率限制，则前进到下一个产品
+            if not retry:
+                index += 1
+            
+            # 避免请求过快，增加小延迟
+            if index < total_products and not retry:
+                time.sleep(0.5)
         
         # 输出下载统计信息
-        logger.info(f"期货产品日k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {len(df_products)}")
+        logger.info(f"期货产品日k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {total_products}")
         
         return {"success": success_count, "fail": fail_count}
         
@@ -549,23 +587,60 @@ def _download_main_contract_data(fut_code, pro, config):
         
         # 使用fut_daily下载主力合约数据
         # 主力合约通常使用contract_type='1'
-        df = pro.fut_daily(
-            ts_code=contract_code,
-            contract_type='1',  # 1表示主力合约
-            fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
-        )
+        import time
+        import re
         
-        if df is not None and not df.empty:
-            # 按trade_date升序排序
-            df = df.sort_values('trade_date')
-            
-            # 保存到CSV文件
-            df.to_csv(file_path, index=False, encoding='utf-8')
-            logger.info(f"成功下载{fut_code}主力合约数据，已保存到: {file_path}")
-            return True
-        else:
-            logger.warning(f"未获取到{fut_code}的主力合约数据")
-            return False
+        max_retries = 3  # 最大重试次数
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                df = pro.fut_daily(
+                    ts_code=contract_code,
+                    contract_type='1',  # 1表示主力合约
+                    fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
+                )
+                
+                if df is not None and not df.empty:
+                    # 按trade_date升序排序
+                    df = df.sort_values('trade_date')
+                    
+                    # 保存到CSV文件
+                    df.to_csv(file_path, index=False, encoding='utf-8')
+                    logger.info(f"成功下载{fut_code}主力合约数据，已保存到: {file_path}")
+                    return True
+                else:
+                    logger.warning(f"未获取到{fut_code}的主力合约数据")
+                    return False
+                    
+            except Exception as api_error:
+                # 检查是否是频率限制错误
+                error_msg = str(api_error)
+                if "您每分钟最多访问该接口" in error_msg:
+                    # 提取每分钟限制次数
+                    match = re.search(r'您每分钟最多访问该接口(\d+)次', error_msg)
+                    limit_count = match.group(1) if match else '未知'
+                    logger.warning(f"遇到API频率限制：每分钟最多访问该接口{limit_count}次")
+                    logger.info(f"暂停一分钟后重试下载{fut_code}主力合约数据...")
+                    
+                    # 暂停一分钟
+                    time.sleep(60)
+                    retry_count += 1
+                    
+                    # 如果达到最大重试次数，返回失败
+                    if retry_count >= max_retries:
+                        logger.error(f"已达到最大重试次数({max_retries})，放弃下载{fut_code}主力合约数据")
+                        return False
+                else:
+                    # 其他API错误，不重试
+                    logger.error(f"调用tushare API时发生异常: {api_error}")
+                    return False
+            except Exception as e:
+                # 其他异常，不重试
+                logger.error(f"下载{fut_code}主力合约数据时发生异常: {e}")
+                return False
+        
+        return False
             
     except Exception as e:
         logger.error(f"下载{fut_code}主力合约数据时发生异常: {e}")
