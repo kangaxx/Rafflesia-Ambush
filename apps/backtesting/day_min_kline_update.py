@@ -565,50 +565,52 @@ def _download_future_minute_data(df_products, pro, config, mode=0, freq='1min'):
     """
     私有函数：下载期货产品的分钟级k线数据
     
-def _download_future_minute_data(df_products, pro, config, mode=0):
+    Args:
         df_products: get_all_shfe_products返回的上期所全部期货产品信息
         pro: 已初始化的tushare pro接口对象
         config: 配置字典
         mode: 运行模式，0表示自动模式，1表示手动模式，默认为0
-        freq: 时间粒度，支持'1min'、'5min'和'15min'，默认为'1min'
+        freq: 分钟级数据时间粒度，1min(1分钟), 5min(5分钟), 15min(15分钟), 30min(30分钟)，默认为1min
     
     Returns:
         dict: 下载统计信息，包含成功和失败的数量
+    """
     try:
-        # 验证时间粒度参数
-        valid_freqs = ['1min', '5min', '15min']
-        if freq not in valid_freqs:
-            logger.error(f"无效的时间粒度: {freq}，支持的时间粒度为: {', '.join(valid_freqs)}")
+        if pro is None:
+            logger.error("未提供已初始化的 tushare pro 对象")
+            return {"success": 0, "fail": 0}
+        
         if df_products is None or df_products.empty:
             logger.warning("没有可用的期货产品数据")
             return {"success": 0, "fail": 0}
         
-        logger.info(f"开始下载期货产品{freq}分钟级k线数据")
+        logger.info("开始下载期货产品分钟级k线数据")
         
         # 获取当前系统日期（格式：YYYYMMDD）
         from datetime import datetime
-        logger.info("开始下载期货产品分钟级k线数据")
+        import time
         current_date = datetime.now().strftime('%Y%m%d')
         logger.info(f"当前系统日期: {current_date}")
+        logger.info(f"分钟级数据时间粒度: {freq}")
         
-        # 获取tushare_root和future、分钟级数据路径
+        # 获取tushare_root和future、1min路径
         tushare_root = config.get('tushare_root', '~/.tushare')
         future_path = config.get('future', '/data/raw/futures')
-        min_path = config.get(freq, f'/{freq}')
-        # 获取tushare_root和future、1min路径
+        min_path = config.get(freq, '/other')
+        
         # 展开路径并构建完整的保存路径
         tushare_root = os.path.expanduser(tushare_root)
-        min_path = config.get('1min', '/1min')
+        save_dir = os.path.join(tushare_root, future_path.lstrip('/'), min_path.lstrip('/'))
         if sys.platform == 'win32':
             save_dir = save_dir.replace('/', '\\')
         
         # 确保保存目录存在
         os.makedirs(save_dir, exist_ok=True)
-        logger.info(f"{freq}分钟级k线数据保存目录: {save_dir}")
+        logger.info(f"分钟级k线数据保存目录: {save_dir}")
         
         # 初始化统计计数器
         success_count = 0
-        logger.info(f"分钟级k线数据保存目录: {save_dir}")
+        fail_count = 0
         
         # 转换为列表，便于索引操作
         products_list = df_products.to_dict('records')
@@ -646,64 +648,58 @@ def _download_future_minute_data(df_products, pro, config, mode=0):
                         # 已退市产品，检查文件是否存在
                         if not os.path.exists(file_path):
                             need_download = True
-                            logger.info(f"产品 {symbol} 已退市，文件不存在，需要下载{freq}分钟数据")
-                        else:
-                            logger.info(f"产品 {symbol} 已退市，文件已存在，跳过下载{freq}分钟数据")
-                            success_count += 1
                             logger.info(f"产品 {symbol} 已退市，文件不存在，需要下载分钟数据")
-                            continue
+                        else:
                             logger.info(f"产品 {symbol} 已退市，文件已存在，跳过下载分钟数据")
+                            success_count += 1
+                            index += 1
+                            continue
+                    else:
                         # 未退市产品，根据运行模式决定是否覆盖
                         file_exists = os.path.exists(file_path)
                         if mode == 0:  # 自动模式
                             need_download = True
-                            logger.info(f"产品 {symbol} 未退市，自动模式，需要下载{freq}分钟数据")
+                            logger.info(f"产品 {symbol} 未退市，自动模式，需要下载分钟数据")
                         else:  # 手动模式
                             if not file_exists:
                                 need_download = True
-                            logger.info(f"产品 {symbol} 未退市，自动模式，需要下载分钟数据")
-                            else:
-                                logger.info(f"产品 {symbol} 未退市，手动模式，文件已存在，跳过下载{freq}分钟数据")
-                                success_count += 1
                                 logger.info(f"产品 {symbol} 未退市，手动模式，文件不存在，需要下载分钟数据")
-                                continue
+                            else:
                                 logger.info(f"产品 {symbol} 未退市，手动模式，文件已存在，跳过下载分钟数据")
+                                success_count += 1
+                                index += 1
+                                continue
+                else:
                     # delist_date无效，默认下载
                     need_download = True
-                    logger.info(f"产品 {symbol} delist_date无效，需要下载{freq}分钟数据")
+                    logger.info(f"产品 {symbol} delist_date无效，需要下载分钟数据")
                 
                 # 执行下载
                 if need_download:
-                    logger.info(f"产品 {symbol} delist_date无效，需要下载分钟数据")
-                    logger.info(f"正在下载 {symbol} 的{freq}分钟级k线数据")
-                    try:
-                        # ft_mins接口参数设置
-                        # 由于分钟数据量较大，这里设置一个合理的开始日期，避免下载过多历史数据
+                    # 使用ft_mins下载分钟级k线数据
                     logger.info(f"正在下载 {symbol} 的分钟级k线数据")
-                        import datetime
-                        # 根据时间粒度调整数据获取的时间范围
-                        if freq == '1min':
-                            # 1分钟数据量较大，限制为最近30天
-                            days_limit = 30
-                        start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime('%Y%m%d')
-                            end_date=current_date,
+                    try:
+                        # 不指定start_date和end_date，获取全部数据
+                        min_df = pro.ft_mins(
+                            ts_code=ts_code,
                             freq=freq,
                             fields='ts_code,trade_time,open,high,low,close,vol,amount,oi'
                         )
                         
+                        if min_df is not None and not min_df.empty:
                             # 按trade_time升序排序
                             min_df = min_df.sort_values('trade_time')
                             
                             # 保存到CSV文件
                             min_df.to_csv(file_path, index=False, encoding='utf-8')
-                            logger.info(f"成功下载 {symbol} 的{freq}分钟级k线数据，已保存到: {file_path}")
+                            logger.info(f"成功下载 {symbol} 的分钟级k线数据，已保存到: {file_path}")
                             success_count += 1
                         else:
-                            logger.warning(f"未获取到 {symbol} 的{freq}分钟级k线数据")
-                            logger.info(f"成功下载 {symbol} 的分钟级k线数据，已保存到: {file_path}")
+                            logger.warning(f"未获取到 {symbol} 的分钟级k线数据")
+                            fail_count += 1
                     except Exception as api_error:
                         # 检查是否是频率限制错误
-                            logger.warning(f"未获取到 {symbol} 的分钟级k线数据")
+                        error_msg = str(api_error)
                         if "您每分钟最多访问该接口" in error_msg:
                             # 提取每分钟限制次数
                             import re
@@ -732,16 +728,15 @@ def _download_future_minute_data(df_products, pro, config, mode=0):
                 time.sleep(0.5)
         
         # 输出下载统计信息
-        logger.info(f"期货产品{freq}分钟级k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {total_products}")
+        logger.info(f"期货产品分钟级k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {total_products}")
         
         return {"success": success_count, "fail": fail_count}
         
-        logger.info(f"期货产品分钟级k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {total_products}")
-        logger.error(f"下载期货产品{freq}分钟级k线数据时发生异常: {e}")
+    except Exception as e:
+        logger.error(f"下载期货产品分钟级k线数据时发生异常: {e}")
         return {"success": 0, "fail": 0}
 
-
-        logger.error(f"下载期货产品分钟级k线数据时发生异常: {e}")
+def _download_main_contract_data(fut_code, pro, config, mode=0):
     """
     私有函数：下载主力合约数据
     
@@ -837,13 +832,8 @@ def _download_future_minute_data(df_products, pro, config, mode=0):
                     # 其他API错误，不重试
                     logger.error(f"调用tushare API时发生异常: {api_error}")
                     return False
-            except Exception as e:
-                # 其他异常，不重试
-                logger.error(f"下载{fut_code}主力合约数据时发生异常: {e}")
-                return False
-        
+
         return False
-            
     except Exception as e:
         logger.error(f"下载{fut_code}主力合约数据时发生异常: {e}")
         return False
@@ -1063,10 +1053,6 @@ def main():
         
         # 调用函数下载期货产品分钟级k线数据
         if download_min:
-            # 获取要下载的分钟级数据时间粒度
-            freqs_to_download = [args.freq]
-            
-            # 如果用户指定了'all'，则下载所有时间粒度
             logger.info("正在下载上期所期货产品分钟级k线数据...")
             if df_shfe_products is None or df_shfe_products.empty:
                 df_shfe_products = get_all_shfe_products(pro)
@@ -1074,6 +1060,10 @@ def main():
             if df_shfe_products is not None and not df_shfe_products.empty:
                 min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode)
                 logger.info(f"期货产品分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
+                min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq='5min')
+                logger.info(f"期货产品5分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
+                min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq='15min')
+                logger.info(f"期货产品15分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
             else:
                 logger.warning("未能获取上期所期货产品信息，跳过分钟级k线数据下载")
         fail_count = 0
