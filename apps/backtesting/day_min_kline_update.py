@@ -502,6 +502,7 @@ def main():
         # 解析命令行参数
         args = parse_arguments()
         
+       
         # 检查并创建tushare_root目录
         tushare_root = check_and_create_tushare_root(args.config)
         
@@ -518,12 +519,20 @@ def main():
         if args.contracts and args.contracts.strip():
             contracts = [c.strip() for c in args.contracts.split(',') if c.strip()]
         else:
-            contracts = []
+            # 如果-c参数为空，调用get_default_fut_codes获取默认值
+            logger.info("-c参数为空，正在获取默认期货合约代码...")
+            default_codes = get_default_fut_codes()
+            if default_codes and default_codes.strip():
+                contracts = [c.strip() for c in default_codes.split(',') if c.strip()]
+                logger.info(f"成功获取默认合约列表")
+            else:
+                contracts = []
+        
         logger.info(f"需要更新的合约列表: {contracts}")
         
         # 如果合约列表为空，给出提示并退出
         if not contracts:
-            logger.error("未指定需要更新的合约，程序将退出")
+            logger.error("无法获取有效的合约列表，程序将退出")
             sys.exit(1)
         
         # 构建index目录作为save_path
