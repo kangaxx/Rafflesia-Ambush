@@ -387,6 +387,127 @@ def get_all_shfe_products(pro):
         logger.error(f"获取上期所期货产品信息时发生异常: {e}")
         return None
 
+def download_future_daily_data(df_products, pro, config):
+    """
+    下载期货产品的日k线数据
+    
+    Args:
+        df_products: get_all_shfe_products返回的上期所全部期货产品信息
+        pro: 已初始化的tushare pro接口对象
+        config: 配置字典
+    
+    Returns:
+        dict: 下载统计信息，包含成功和失败的数量
+    """
+    try:
+        if pro is None:
+            logger.error("未提供已初始化的 tushare pro 对象")
+            return {"success": 0, "fail": 0}
+        
+        if df_products is None or df_products.empty:
+            logger.warning("没有可用的期货产品数据")
+            return {"success": 0, "fail": 0}
+        
+        logger.info("开始下载期货产品日k线数据")
+        
+        # 获取当前系统日期（格式：YYYYMMDD）
+        from datetime import datetime
+        current_date = datetime.now().strftime('%Y%m%d')
+        logger.info(f"当前系统日期: {current_date}")
+        
+        # 获取tushare_root和future、1d路径
+        tushare_root = config.get('tushare_root', '~/.tushare')
+        future_path = config.get('future', '/data/raw/futures')
+        day_path = config.get('1d', '/1d')
+        
+        # 展开路径并构建完整的保存路径
+        tushare_root = os.path.expanduser(tushare_root)
+        save_dir = os.path.join(tushare_root, future_path.lstrip('/'), day_path.lstrip('/'))
+        if sys.platform == 'win32':
+            save_dir = save_dir.replace('/', '\\')
+        
+        # 确保保存目录存在
+        os.makedirs(save_dir, exist_ok=True)
+        logger.info(f"日k线数据保存目录: {save_dir}")
+        
+        # 初始化统计计数器
+        success_count = 0
+        fail_count = 0
+        
+        # 遍历每个期货产品
+        for index, row in df_products.iterrows():
+            try:
+                # 获取必要的字段
+                symbol = row.get('symbol', '')
+                ts_code = row.get('ts_code', '')
+                delist_date = str(row.get('delist_date', ''))
+                
+                # 验证必要字段
+                if not symbol or not ts_code:
+                    logger.warning(f"跳过无效数据行: 缺少symbol或ts_code")
+                    fail_count += 1
+                    continue
+                
+                # 构建文件名和路径
+                file_name = f"{symbol}.csv"
+                file_path = os.path.join(save_dir, file_name)
+                
+                # 判断是否需要下载
+                need_download = False
+                
+                # 如果delist_date有效且不为空
+                if delist_date and delist_date.isdigit() and len(delist_date) == 8:
+                    if delist_date < current_date:
+                        # 已退市产品，检查文件是否存在
+                        if not os.path.exists(file_path):
+                            need_download = True
+                            logger.info(f"产品 {symbol} 已退市，文件不存在，需要下载")
+                        else:
+                            logger.info(f"产品 {symbol} 已退市，文件已存在，跳过下载")
+                            success_count += 1
+                    else:
+                        # 未退市产品，直接下载
+                        need_download = True
+                        logger.info(f"产品 {symbol} 未退市，需要下载")
+                else:
+                    # delist_date无效，默认下载
+                    need_download = True
+                    logger.info(f"产品 {symbol} delist_date无效，需要下载")
+                
+                # 执行下载
+                if need_download:
+                    # 使用fut_daily下载日k线数据
+                    logger.info(f"正在下载 {symbol} 的日k线数据")
+                    daily_df = pro.fut_daily(
+                        ts_code=ts_code,
+                        fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
+                    )
+                    
+                    if daily_df is not None and not daily_df.empty:
+                        # 按trade_date升序排序
+                        daily_df = daily_df.sort_values('trade_date')
+                        
+                        # 保存到CSV文件
+                        daily_df.to_csv(file_path, index=False, encoding='utf-8')
+                        logger.info(f"成功下载 {symbol} 的日k线数据，已保存到: {file_path}")
+                        success_count += 1
+                    else:
+                        logger.warning(f"未获取到 {symbol} 的日k线数据")
+                        fail_count += 1
+                        
+            except Exception as e:
+                logger.error(f"处理产品数据时发生异常: {e}")
+                fail_count += 1
+        
+        # 输出下载统计信息
+        logger.info(f"期货产品日k线数据下载完成 - 成功: {success_count}, 失败: {fail_count}, 总计: {len(df_products)}")
+        
+        return {"success": success_count, "fail": fail_count}
+        
+    except Exception as e:
+        logger.error(f"下载期货产品日k线数据时发生异常: {e}")
+        return {"success": 0, "fail": 0}
+
 def _download_main_contract_data(fut_code, pro, config):
     """
     私有函数：下载主力合约数据
@@ -649,6 +770,15 @@ def main():
         # 输出主力合约数据下载汇总信息
         logger.info(f"主力合约数据下载汇总 - 成功: {main_contract_success_count}, 失败: {main_contract_fail_count}, 总计: {len(contracts)}")
         
+        # 调用函数下载期货产品日k线数据
+        logger.info("正在下载上期所期货产品日k线数据...")
+        df_shfe_products = get_all_shfe_products(pro)
+        if df_shfe_products is not None and not df_shfe_products.empty:
+            download_stats = download_future_daily_data(df_shfe_products, pro, config)
+            logger.info(f"期货产品日k线数据下载统计: 成功 {download_stats['success']} 个, 失败 {download_stats['fail']} 个")
+        else:
+            logger.warning("未能获取上期所期货产品信息，跳过日k线数据下载")
+            
         # 遍历合约列表并更新数据
         logger.info("开始更新K线数据...")
         success_count = 0
