@@ -387,6 +387,69 @@ def get_all_shfe_products(pro):
         logger.error(f"获取上期所期货产品信息时发生异常: {e}")
         return None
 
+def _download_main_contract_data(fut_code, pro, config):
+    """
+    私有函数：下载主力合约数据
+    
+    Args:
+        fut_code: 期货品种代码
+        pro: 已初始化的tushare pro接口对象
+        config: 配置字典
+    
+    Returns:
+        bool: 下载是否成功
+    """
+    try:
+        if pro is None:
+            logger.error("未提供已初始化的 tushare pro 对象")
+            return False
+        
+        logger.info(f"开始下载{fut_code}主力合约数据")
+        
+        # 构建合约代码：fut_code + '.SHF'
+        contract_code = f"{fut_code}.SHF"
+        
+        # 获取tushare_root和index路径
+        tushare_root = config.get('tushare_root', '~/.tushare')
+        index_path = config.get('index', '/data/raw/index')
+        
+        # 展开路径并构建完整的保存路径
+        tushare_root = os.path.expanduser(tushare_root)
+        save_dir = os.path.join(tushare_root, index_path.lstrip('/'))
+        if sys.platform == 'win32':
+            save_dir = save_dir.replace('/', '\\')
+        
+        # 确保保存目录存在
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 构建文件名：{fut_code}9999.csv
+        file_name = f"{fut_code}9999.csv"
+        file_path = os.path.join(save_dir, file_name)
+        
+        # 使用fut_daily下载主力合约数据
+        # 主力合约通常使用contract_type='1'
+        df = pro.fut_daily(
+            ts_code=contract_code,
+            contract_type='1',  # 1表示主力合约
+            fields='ts_code,trade_date,pre_close,pre_settle,open,high,low,close,settle,change1,change2,vol,amount,oi,oi_chg'
+        )
+        
+        if df is not None and not df.empty:
+            # 按trade_date升序排序
+            df = df.sort_values('trade_date')
+            
+            # 保存到CSV文件
+            df.to_csv(file_path, index=False, encoding='utf-8')
+            logger.info(f"成功下载{fut_code}主力合约数据，已保存到: {file_path}")
+            return True
+        else:
+            logger.warning(f"未获取到{fut_code}的主力合约数据")
+            return False
+            
+    except Exception as e:
+        logger.error(f"下载{fut_code}主力合约数据时发生异常: {e}")
+        return False
+
 def get_default_fut_codes():
     """
     获取默认的期货合约代码列表，从tushare接口获取上期所全部产品的fut_code并去重
