@@ -377,7 +377,7 @@ def get_all_shfe_products(pro):
         fields = 'ts_code,symbol,exchange,name,fut_code,multiplier,trade_unit,per_unit,quote_unit,quote_unit_desc,d_mode_desc,list_date,delist_date,d_month,last_ddate,trade_time_desc'
         
         df = pro.fut_basic(
-            exchange='SHF',  # 上期所
+            exchange='SHFE',  # 上期所
             fut_type='1',    # 1表示期货
             fields=fields
         )
