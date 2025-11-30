@@ -32,6 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info(f"日志文件路径: {log_file}")
 
+
 def parse_arguments():
     """
     解析命令行参数
@@ -41,9 +42,13 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description='日线分钟线K线数据更新工具')
     
-    # 添加合约参数 默认RB.SHF,AG.SHF
-    parser.add_argument('-c', '--contracts', type=str, default='RB.SHF,AG.SHF',
-                        help='需要更新的合约代码，多个合约用逗号分隔，例如: "RB.SHF,HC.SHF,I.DCE"')
+    # 先获取默认的期货合约代码列表
+    default_codes = get_default_fut_codes()
+    
+    # 添加合约参数
+    parser.add_argument('-c', '--contracts', type=str,
+                        default=default_codes,
+                        help='需要更新的合约代码，多个合约用逗号分隔，例如: "RB.SHF,HC.SHF,I.DCE"，如果不输入则使用从tushare接口获取的上期所SHFE的全部合约fut_code')
     
     # 添加数据类型参数
     parser.add_argument('-t', '--data_type', type=str, default='both', choices=['day', 'min', 'both'],
@@ -350,6 +355,74 @@ def init_tushare_api(key_filename: str = 'key.json'):
     except Exception as e:
         logger.error(f"初始化 tushare pro 接口时发生异常: {e}")
         return None
+
+def get_all_shfe_products(pro):
+    """
+    通过tushare接口获取上期所全部期货产品的信息
+    
+    Args:
+        pro: 已初始化的tushare pro接口对象
+    
+    Returns:
+        pandas.DataFrame: 包含上期所全部期货产品信息的数据框，如果获取失败则返回None
+    """
+    try:
+        if pro is None:
+            logger.error("未提供已初始化的 tushare pro 对象")
+            return None
+        
+        logger.info("开始获取上期所全部期货产品信息")
+        
+        # 指定用户要求的17个字段
+        fields = 'ts_code,symbol,exchange,name,fut_code,multiplier,trade_unit,per_unit,quote_unit,quote_unit_desc,d_mode_desc,list_date,delist_date,d_month,last_ddate,trade_time_desc'
+        
+        df = pro.fut_basic(
+            exchange='SHF',  # 上期所
+            fut_type='1',    # 1表示期货
+            fields=fields
+        )
+        
+        return df
+    except Exception as e:
+        logger.error(f"获取上期所期货产品信息时发生异常: {e}")
+        return None
+
+def get_default_fut_codes():
+    """
+    获取默认的期货合约代码列表，从tushare接口获取上期所全部产品的fut_code并去重
+    
+    Returns:
+        str: 逗号分隔的fut_code字符串，如果获取失败则返回空字符串
+    """
+    try:
+        logger.info("开始获取默认期货合约代码列表")
+        
+        # 初始化tushare API
+        pro = init_tushare_api()
+        if pro is None:
+            logger.error("初始化tushare API失败，无法获取默认期货合约代码")
+            return ""
+        
+        # 获取全部上期所产品信息
+        df = get_all_shfe_products(pro)
+        if df is None or df.empty:
+            logger.warning("未获取到上期所产品信息，无法生成默认期货合约代码")
+            return ""
+        
+        # 提取fut_code字段并去重
+        if 'fut_code' in df.columns:
+            unique_fut_codes = df['fut_code'].dropna().unique()
+            # 转换为逗号分隔的字符串
+            default_codes = ','.join(unique_fut_codes)
+            logger.info(f"成功获取{len(unique_fut_codes)}个去重后的期货合约代码")
+            return default_codes
+        else:
+            logger.error("获取的数据中不包含fut_code字段")
+            return ""
+            
+    except Exception as e:
+        logger.error(f"获取默认期货合约代码时发生异常: {e}")
+        return ""
 def update_kline_data(contract, data_type, config, pro):
     """
     更新指定合约的K线数据
@@ -434,14 +507,24 @@ def main():
         
         # 加载配置文件
         config = load_config(args.config)
-        # 显式一次性初始化 tushare pro（使用默认 key.json 或根据需要传参）
-        pro = init_tushare_api('key.json')
+        
+        # 初始化tushare API
+        pro = init_tushare_api()
         if pro is None:
-            logger.error("初始化 tushare pro 失败，退出")
+            logger.error("无法初始化tushare API，程序将退出")
             sys.exit(1)
-        # 解析合约列表
-        contracts = [c.strip() for c in args.contracts.split(',')]
+        
+        # 解析合约列表，处理可能的空字符串情况
+        if args.contracts and args.contracts.strip():
+            contracts = [c.strip() for c in args.contracts.split(',') if c.strip()]
+        else:
+            contracts = []
         logger.info(f"需要更新的合约列表: {contracts}")
+        
+        # 如果合约列表为空，给出提示并退出
+        if not contracts:
+            logger.error("未指定需要更新的合约，程序将退出")
+            sys.exit(1)
         
         # 构建index目录作为save_path
         index_path = config.get('index', '/data/raw/index')
