@@ -624,6 +624,31 @@ def main():
         # 输出映射处理汇总信息
         logger.info(f"期货映射处理汇总 - 成功: {map_success_count}, 失败: {map_fail_count}, 总计: {len(contracts)}")
         
+        # 遍历合约列表，下载主力合约数据
+        logger.info("开始下载主力合约数据...")
+        main_contract_success_count = 0
+        main_contract_fail_count = 0
+        
+        for contract in contracts:
+            try:
+                # 从合约代码中提取fut_code（去掉交易所后缀）
+                if '.' in contract:
+                    fut_code = contract.split('.')[0]
+                    logger.info(f"正在下载{contract}的主力合约数据")
+                    if _download_main_contract_data(fut_code, pro, config):
+                        main_contract_success_count += 1
+                    else:
+                        main_contract_fail_count += 1
+                else:
+                    logger.warning(f"合约格式错误，无法提取期货品种代码: {contract}")
+                    main_contract_fail_count += 1
+            except Exception as e:
+                logger.error(f"下载{contract}主力合约数据时发生异常: {e}")
+                main_contract_fail_count += 1
+        
+        # 输出主力合约数据下载汇总信息
+        logger.info(f"主力合约数据下载汇总 - 成功: {main_contract_success_count}, 失败: {main_contract_fail_count}, 总计: {len(contracts)}")
+        
         # 遍历合约列表并更新数据
         logger.info("开始更新K线数据...")
         success_count = 0
