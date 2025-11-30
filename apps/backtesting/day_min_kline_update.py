@@ -285,7 +285,72 @@ def check_and_create_tushare_root(config_path='default_param_list.json'):
         logger.error(f"检查并创建路径时出错: {e}")
         raise
 
-def update_kline_data(contract, data_type, config):
+def _get_tushare_token(key_filename: str = 'key.json') -> str | None:
+    """
+    从本地同目录的 `key.json` 中读取 tushare token。
+
+    支持的键名：'tushare_token', 'token', 'TUSHARE_TOKEN'。
+    返回:
+        token 字符串或 None（未找到或读取出错）
+    """
+    try:
+        key_path = os.path.join(script_dir, key_filename)
+        if not os.path.exists(key_path):
+            logger.warning(f"密钥文件不存在: {key_path}")
+            return None
+
+        with open(key_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 支持多种可能的键名
+        token = data.get('tushare_token')
+        if not token:
+            logger.warning(f"在密钥文件中未找到 tushare token，文件路径: {key_path}")
+            return None
+
+        logger.info(f"成功从密钥文件加载 tushare token: {key_path}")
+        return token
+
+    except json.JSONDecodeError as e:
+        logger.error(f"解析密钥文件时发生 JSON 错误: {key_path}，错误: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"读取 tushare token 时发生异常: {e}")
+        return None
+
+# python
+def init_tushare_api(key_filename: str = 'key.json'):
+    """
+    使用 _get_tushare_token 得到的 token 初始化 tushare pro 接口。
+
+    返回:
+        tushare pro 接口对象 或 None（失败）
+    """
+    token = _get_tushare_token(key_filename)
+    if not token:
+        logger.error("未获取到 tushare token，无法初始化 tushare")
+        return None
+
+    try:
+        import tushare as ts
+    except Exception as e:
+        logger.error(f"导入 tushare 失败: {e}")
+        return None
+
+    try:
+        # 优先使用 pro_api(token) 的方式，新旧版本兼容处理
+        try:
+            pro = ts.pro_api(token)
+        except TypeError:
+            # 旧版用 set_token + pro_api()
+            ts.set_token(token)
+            pro = ts.pro_api()
+        logger.info("成功初始化 tushare pro 接口")
+        return pro
+    except Exception as e:
+        logger.error(f"初始化 tushare pro 接口时发生异常: {e}")
+        return None
+def update_kline_data(contract, data_type, config, pro):
     """
     更新指定合约的K线数据
     
@@ -298,6 +363,10 @@ def update_kline_data(contract, data_type, config):
         bool: 更新是否成功
     """
     try:
+        if pro is None:
+            logger.error("未提供已初始化的 tushare pro 对象，停止更新")
+            return False
+
         logger.info(f"开始更新合约 {contract} 的数据，数据类型: {data_type}")
         
         # 在这里实现具体的K线数据更新逻辑
@@ -365,7 +434,11 @@ def main():
         
         # 加载配置文件
         config = load_config(args.config)
-        
+        # 显式一次性初始化 tushare pro（使用默认 key.json 或根据需要传参）
+        pro = init_tushare_api('key.json')
+        if pro is None:
+            logger.error("初始化 tushare pro 失败，退出")
+            sys.exit(1)
         # 解析合约列表
         contracts = [c.strip() for c in args.contracts.split(',')]
         logger.info(f"需要更新的合约列表: {contracts}")
@@ -400,7 +473,7 @@ def main():
         fail_count = 0
         
         for contract in contracts:
-            if update_kline_data(contract, args.data_type, config):
+            if update_kline_data(contract, args.data_type, config, pro):
                 success_count += 1
             else:
                 fail_count += 1

@@ -226,36 +226,52 @@ def get_future_mapping(fut_code: str) -> List[Dict[str, Any]]:
         
         raise RuntimeError(error_msg)
 
+# python
 def save_mapping_data(data: List[Dict[str, Any]], save_path: str, fut_code: str):
     """
-    保存映射数据到文件
-    
+    保存映射数据到文件，并同时保存简略版记录到 `{fut_code}_switch_record.csv`
+
     Args:
         data: 映射数据列表
         save_path: 保存路径（目录）
         fut_code: 期货产品编码
     """
-    # 拼接完整文件名：期货产品编码 + 'fut_mapping.csv'
     filename = f"{fut_code}_fut_mapping.csv"
-    # 组合完整文件路径
     full_file_path = os.path.join(save_path, filename)
-    
+
     logger.info(f"保存映射数据到 {full_file_path}")
-    
+
     # 确保保存目录存在
     os.makedirs(os.path.dirname(os.path.abspath(full_file_path)), exist_ok=True)
-    
-    # 保存数据到文件
+
     try:
+        # 保存完整映射数据
         with open(full_file_path, 'w', encoding='utf-8') as f:
-            # 写入CSV格式，包含trade_date和mapping_ts_code字段
-            f.write("trade_date,mapping_ts_code\n")  # 写入表头
+            f.write("trade_date,mapping_ts_code\n")
             for item in data:
                 f.write(f"{item.get('trade_date', '')},{item.get('mapping_ts_code', '')}\n")
         logger.info(f"映射数据已成功保存到 {full_file_path}")
     except Exception as e:
         logger.error(f"保存映射数据失败: {str(e)}")
         raise
+
+    # 尝试生成并保存简略版记录（switch_record）
+    try:
+        switch_filename = f"{fut_code}_switch_record.csv"
+        switch_full_path = os.path.join(save_path, switch_filename)
+
+        # 使用已定义的 simplify_mapping_data 函数生成简略数据
+        simplified = simplify_mapping_data(data)
+
+        with open(switch_full_path, 'w', encoding='utf-8') as sf:
+            sf.write("trade_date,mapping_ts_code\n")
+            for item in simplified:
+                sf.write(f"{item.get('trade_date', '')},{item.get('mapping_ts_code', '')}\n")
+
+        logger.info(f"简略记录已成功保存到 {switch_full_path}")
+    except Exception as e:
+        # 仅记录警告，不抛出，避免影响主文件已保存的情况
+        logger.warning(f"保存简略记录失败: {str(e)}")
 
 def load_compare_source(compare_source: str) -> List[Dict[str, Any]]:
     """
@@ -416,7 +432,105 @@ def save_comparison_result(result: List[Dict[str, Any]], result_path: str):
     except Exception as e:
         logger.error(f"保存比较结果失败: {str(e)}")
         raise
+# python
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 
+def _parse_date_safe(date_val: Optional[Any]) -> Any:
+    """
+    尝试将 date_val 解析为 datetime，用于比较。
+    支持 int (例如 20230101)、常见字符串格式和 datetime。
+    无法解析时返回原始值用于比较。
+    """
+    if date_val is None:
+        return datetime.min
+    if isinstance(date_val, datetime):
+        return date_val
+    try:
+        # 支持整数日期如 20230101
+        if isinstance(date_val, int):
+            date_str = str(date_val)
+        else:
+            date_str = str(date_val).strip()
+        for fmt in ("%Y%m%d", "%Y-%m-%d", "%Y/%m/%d", "%Y%m%d%H%M%S"):
+            try:
+                return datetime.strptime(date_str, fmt)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    # 解析失败则返回原始字符串，比较时使用其字典序
+    return date_val
+
+def simplify_mapping_data(mapping_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    简化连续相同的 mapping_ts_code 段。
+    输入:
+      mapping_data: 列表, 每项应包含 'mapping_ts_code' 和 'trade_date'
+    规则:
+      - 按原始列表顺序扫描连续相同的 mapping_ts_code 为一组
+      - 若组长度 <= 2 则全部保留
+      - 若组长度 > 2 则仅保留组内按 trade_date 最早和最晚的两条记录
+        * 若最早和最晚解析后相等, 则退回到保留组首条和末条
+    返回:
+      新的记录列表, 保持原始非合并段的相对顺序
+    """
+    if not mapping_data:
+        return []
+
+    result: List[Dict[str, Any]] = []
+    n = len(mapping_data)
+    i = 0
+
+    while i < n:
+        cur_code = mapping_data[i].get("mapping_ts_code")
+        j = i + 1
+        # 收集连续段
+        while j < n and mapping_data[j].get("mapping_ts_code") == cur_code:
+            j += 1
+        group = mapping_data[i:j]
+        glen = len(group)
+
+        if glen <= 2:
+            result.extend(group)
+        else:
+            # 找到组内最早和最晚日期的值
+            parsed_dates = [_parse_date_safe(item.get("trade_date")) for item in group]
+            try:
+                earliest_date = min(parsed_dates)
+                latest_date = max(parsed_dates)
+            except Exception:
+                # 若比较失败，退回保留首末
+                result.append(group[0])
+                result.append(group[-1])
+                i = j
+                continue
+
+            # 找到对应的记录：最早取第一个匹配，最晚取最后一个匹配
+            if earliest_date == latest_date:
+                # 所有日期相同或不可区分，保留组首尾
+                result.append(group[0])
+                result.append(group[-1])
+            else:
+                # 找到最早记录的第一个索引
+                earliest_idx = next(idx for idx, d in enumerate(parsed_dates) if d == earliest_date)
+                # 找到最晚记录的最后一个索引
+                latest_idx = len(parsed_dates) - 1 - next(idx for idx, d in enumerate(reversed(parsed_dates)) if d == latest_date)
+
+                earliest_item = group[earliest_idx]
+                latest_item = group[latest_idx]
+
+                # 按日期顺序加入，若解析值导致顺序相反则调整
+                if _parse_date_safe(earliest_item.get("trade_date")) <= _parse_date_safe(latest_item.get("trade_date")):
+                    result.append(earliest_item)
+                    result.append(latest_item)
+                else:
+                    result.append(latest_item)
+                    result.append(earliest_item)
+
+        i = j
+
+    return result
 def main():
     """主函数"""
     try:
