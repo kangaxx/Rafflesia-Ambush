@@ -56,7 +56,7 @@ def find_date_column(df):
         str: 日期列名
     """
     # 常见的日期列名
-    date_columns = ['trade_date', 'date', 'datetime', 'time', 'trading_date', '交易日']
+    date_columns = ['trade_date', 'date', 'datetime', 'time', 'trading_date', '交易日', 'trade_time', 'Trade_Time', 'TRADE_TIME']
     
     date_column = None
     for col in date_columns:
@@ -77,7 +77,7 @@ def find_date_column(df):
 
 def normalize_date(date_val):
     """
-    标准化日期格式为YYYYMMDD字符串
+    标准化日期格式为YYYYMMDD字符串，支持各种日期格式包括trade_time
     
     Args:
         date_val: 日期值
@@ -85,27 +85,39 @@ def normalize_date(date_val):
     Returns:
         str: 标准化后的日期字符串，或None如果无法解析
     """
+    if pd.isna(date_val):
+        return None
+    
     date_str = str(date_val).strip()
     # 确保是8位数字的日期格式
     if len(date_str) == 8 and date_str.isdigit():
         return date_str
-    elif '-' in date_str or '/' in date_str:
-        # 尝试解析标准日期格式
+    
+    # 尝试各种日期格式
+    formats = [
+        '%Y%m%d', '%Y-%m-%d', '%Y/%m/%d',
+        '%Y%m%d %H:%M:%S', '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%SZ',
+        # 额外支持更多时间格式
+        '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M',
+        '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y',
+        '%Y%m%d%H%M%S'  # 紧凑的年月日时分秒格式
+    ]
+    
+    # 尝试不同的日期格式
+    for fmt in formats:
         try:
-            # 尝试不同的日期格式
-            date_formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y%m%d']
-            parsed_date = None
-            for fmt in date_formats:
-                try:
-                    parsed_date = datetime.strptime(date_str, fmt)
-                    break
-                except ValueError:
-                    continue
-            
-            if parsed_date:
-                return parsed_date.strftime('%Y%m%d')
-        except Exception as e:
-            logger.warning(f"无法解析日期: {date_str}, 错误: {e}")
+            parsed_date = datetime.strptime(date_str, fmt)
+            return parsed_date.strftime('%Y%m%d')
+        except ValueError:
+            continue
+    
+    # 如果都失败，尝试使用pandas的to_datetime函数
+    try:
+        parsed_date = pd.to_datetime(date_str)
+        return parsed_date.strftime('%Y%m%d')
+    except Exception as e:
+        logger.warning(f"无法解析日期: {date_str}, 错误: {e}")
     return None
 
 def find_field_mapping(df):
