@@ -245,10 +245,9 @@ def load_data_from_file(file_path, start_date=None, end_date=None):
         logger.error(f"读取文件时发生错误: {e}")
         return None, None, None, None
 
-def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
-                     standard_mapping, check_mapping, full_compare=0):
+def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col, standard_mapping, check_mapping, full_compare=0):
     """
-    将两个数据源按时间对齐并比较字段值
+    全新的数据比较算法：高效比较两个CSV文件的数据
     
     Args:
         standard_df: 标准数据源的DataFrame
@@ -257,256 +256,124 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
         check_date_col: 被检查数据源的原始日期列名
         standard_mapping: 标准数据源的字段映射
         check_mapping: 被检查数据源的字段映射
-        full_compare: 是否生成全部对比数据，0表示保持当前逻辑，1表示将全部数据按时间拼接
+        full_compare: 比较模式
     
     Returns:
         tuple: (merged_df, summary)
-            merged_df: 合并后的DataFrame，包含时间对齐的数据和比较结果
-            summary: 比较结果摘要统计信息
+            merged_df: 合并后的DataFrame
+            summary: 比较结果摘要
     """
-    logger.info(f"开始按时间对齐比较两个数据源，full_compare={full_compare}...")
+    logger.info("执行全新的数据比较算法...")
     
-    # 获取所有唯一日期（标准化日期）- 直接使用索引更高效
-    all_dates = sorted(set(standard_df.index).union(set(check_df.index)))
-    logger.info(f"总共找到 {len(all_dates)} 个唯一日期")
-    
-    # 获取可比较的字段
-    common_fields = set(standard_mapping.keys()) & set(check_mapping.keys())
-    logger.info(f"找到 {len(common_fields)} 个可比较字段: {', '.join(sorted(common_fields))}")
-    
-    # 计算统计信息 - 直接使用索引更高效
+    # 1. 计算基础统计信息
     total_standard = len(standard_df)
     total_check = len(check_df)
-    total_common = len(set(standard_df.index).intersection(set(check_df.index)))
-    coverage_rate = (total_common / total_standard) * 100 if total_standard > 0 else 0
     
-    # 初始化差异统计字典
+    # 2. 确定共同日期和覆盖率
+    std_dates = set(standard_df.index)
+    chk_dates = set(check_df.index)
+    common_dates = std_dates & chk_dates
+    total_common = len(common_dates)
+    coverage_rate = (total_common / total_standard * 100) if total_standard > 0 else 0
+    
+    # 3. 准备数据 - 统一处理
+    std_df = standard_df.copy().add_prefix('标准数据_')
+    chk_df = check_df.copy().add_prefix('检查数据_')
+    
+    # 重置索引并标准化日期列
+    std_df = std_df.reset_index().rename(columns={'_standard_date': '日期'})
+    chk_df = chk_df.reset_index().rename(columns={'_standard_date': '日期'})
+    
+    # 4. 合并数据
+    merged_df = pd.merge(std_df, chk_df, on='日期', how='outer')
+    
+    # 5. 初始化元数据列
+    merged_df['数据来源'] = '两者都有'
+    merged_df['比较结果'] = '完全一致'
+    
+    # 6. 标记数据来源
+    std_only_dates = std_dates - chk_dates
+    chk_only_dates = chk_dates - std_dates
+    
+    if std_only_dates:
+        mask = merged_df['日期'].isin(std_only_dates)
+        merged_df.loc[mask, ['数据来源', '比较结果']] = ['仅标准数据', '仅标准数据存在']
+    
+    if chk_only_dates:
+        mask = merged_df['日期'].isin(chk_only_dates)
+        merged_df.loc[mask, ['数据来源', '比较结果']] = ['仅检查数据', '仅检查数据存在']
+    
+    # 7. 确定可比较字段
+    common_fields = set(standard_mapping.keys()) & set(check_mapping.keys())
     field_discrepancies = {field: 0 for field in common_fields}
     
-    if full_compare == 1:
-        # 生成全部对比数据模式
-        logger.info("使用全部对比模式：将两个数据源的所有字段按时间拼接")
+    # 8. 执行向量化比较（仅针对共同日期）
+    if common_fields and total_common > 0:
+        both_data_mask = merged_df['数据来源'] == '两者都有'
+        both_data_indices = merged_df[both_data_mask].index
         
-        # 复制DataFrame以避免修改原始数据
-        std_df = standard_df.copy()
-        chk_df = check_df.copy()
+        # 创建字段差异记录器
+        index_discrepancies = {}
         
-        # 重命名列，添加前缀以区分不同数据源
-        std_df = std_df.add_prefix('标准数据_')
-        chk_df = chk_df.add_prefix('检查数据_')
-        
-        # 重置索引，以便可以将日期作为普通列
-        std_df = std_df.reset_index()
-        chk_df = chk_df.reset_index()
-        
-        # 重命名索引列（原_standard_date）为日期
-        std_df = std_df.rename(columns={'_standard_date': '日期'})
-        chk_df = chk_df.rename(columns={'_standard_date': '日期'})
-        
-        # 合并两个DataFrame，以日期为key
-        merged_df = pd.merge(std_df, chk_df, on='日期', how='outer')
-        
-        # 创建比较结果和数据来源列
-        merged_df['数据来源'] = '两者都有'
-        merged_df['比较结果'] = '完全一致'
-        
-        # 更新数据来源信息
-        std_only_dates = set(standard_df.index) - set(check_df.index)
-        chk_only_dates = set(check_df.index) - set(standard_df.index)
-        
-        if std_only_dates:
-            merged_df.loc[merged_df['日期'].isin(std_only_dates), '数据来源'] = '仅标准数据'
-            merged_df.loc[merged_df['日期'].isin(std_only_dates), '比较结果'] = '仅标准数据存在'
-        
-        if chk_only_dates:
-            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '数据来源'] = '仅检查数据'
-            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '比较结果'] = '仅检查数据存在'
-        
-        # 对共同日期的数据进行比较 - 使用向量化操作替代逐行处理
-        if common_fields and total_common > 0:
-            common_dates_mask = merged_df['数据来源'] == '两者都有'
-            common_df = merged_df[common_dates_mask].copy()
+        # 对每个字段执行向量化比较
+        for field in common_fields:
+            std_col = f'标准数据_{standard_mapping[field]}'
+            chk_col = f'检查数据_{check_mapping[field]}'
             
-            # 定义浮点数比较阈值
-            float_threshold = DEFAULT_FLOAT_THRESHOLD
+            if std_col in merged_df.columns and chk_col in merged_df.columns:
+                # 获取比较数据
+                std_vals = merged_df.loc[both_data_mask, std_col]
+                chk_vals = merged_df.loc[both_data_mask, chk_col]
+                
+                # 向量化比较逻辑
+                both_notna = std_vals.notna() & chk_vals.notna()
+                
+                # 数值比较（使用np.isclose处理浮点精度）
+                numeric_mask = std_vals.apply(lambda x: isinstance(x, (int, float))) & \
+                              chk_vals.apply(lambda x: isinstance(x, (int, float))) & \
+                              both_notna
+                
+                # 初始化比较结果
+                match_result = pd.Series(False, index=std_vals.index)
+                
+                # 处理数值比较
+                if numeric_mask.any():
+                    match_result[numeric_mask] = np.isclose(
+                        std_vals[numeric_mask].astype(float),
+                        chk_vals[numeric_mask].astype(float),
+                        atol=DEFAULT_FLOAT_THRESHOLD
+                    )
+                
+                # 处理非数值比较
+                non_numeric_mask = ~numeric_mask & both_notna
+                if non_numeric_mask.any():
+                    match_result[non_numeric_mask] = (std_vals[non_numeric_mask] == chk_vals[non_numeric_mask])
+                
+                # 处理缺失值情况
+                match_result[~both_notna] = True
+                
+                # 记录差异
+                discrepancy_indices = match_result[~match_result].index
+                field_discrepancies[field] = len(discrepancy_indices)
+                
+                # 更新索引差异记录器
+                for idx in discrepancy_indices:
+                    if idx not in index_discrepancies:
+                        index_discrepancies[idx] = []
+                    index_discrepancies[idx].append(field)
+        
+        # 9. 批量更新比较结果列
+        if index_discrepancies:
+            # 准备更新数据
+            update_indices = list(index_discrepancies.keys())
+            update_values = [f"不一致: {', '.join(fields)}" for fields in index_discrepancies.values()]
             
-            # 为每个字段创建比较掩码
-            field_masks = {}
-            for field in common_fields:
-                std_field_col = standard_mapping[field]
-                chk_field_col = check_mapping[field]
-                
-                std_col_name = f'标准数据_{std_field_col}'
-                chk_col_name = f'检查数据_{chk_field_col}'
-                
-                if std_col_name in merged_df.columns and chk_col_name in merged_df.columns:
-                    # 使用向量化操作进行比较
-                    std_vals = merged_df.loc[common_dates_mask, std_col_name]
-                    chk_vals = merged_df.loc[common_dates_mask, chk_col_name]
-                    
-                    # 处理NaN情况
-                    both_notna = std_vals.notna() & chk_vals.notna()
-                    
-                    # 数值比较（使用numpy的isclose进行向量化比较）
-                    numeric_compare = np.zeros(len(std_vals), dtype=bool)
-                    numeric_mask = std_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                                 chk_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                                 both_notna
-                    
-                    if numeric_mask.any():
-                        numeric_compare[numeric_mask] = np.isclose(
-                            std_vals[numeric_mask].astype(float),
-                            chk_vals[numeric_mask].astype(float),
-                            atol=float_threshold
-                        )
-                    
-                    # 非数值比较（直接相等比较）
-                    non_numeric_mask = ~numeric_mask & both_notna
-                    if non_numeric_mask.any():
-                        numeric_compare[non_numeric_mask] = (std_vals[non_numeric_mask] == chk_vals[non_numeric_mask])
-                    
-                    # 所有情况的综合比较结果
-                    field_mask = numeric_compare | ~both_notna
-                    field_masks[field] = field_mask
-                    
-                    # 统计差异数量
-                    field_discrepancies[field] = (~field_mask).sum()
-            
-            # 更新比较结果列 - 优化为向量化操作
-            if field_masks:
-                # 创建一个字典来存储每个索引的不一致字段列表
-                index_to_discrepancies = {}
-                
-                # 收集所有不一致的信息
-                for field, mask in field_masks.items():
-                    # 获取不一致的行索引
-                    discrepancy_indices = merged_df[common_dates_mask].index[~mask]
-                    
-                    # 更新每个索引的不一致字段列表
-                    for idx in discrepancy_indices:
-                        if idx not in index_to_discrepancies:
-                            index_to_discrepancies[idx] = []
-                        index_to_discrepancies[idx].append(field)
-                
-                # 一次性生成所有需要更新的行索引和对应的值
-                if index_to_discrepancies:
-                    # 获取所有需要更新的索引
-                    update_indices = list(index_to_discrepancies.keys())
-                    
-                    # 为每个索引生成不一致字段的字符串
-                    update_values = [f"不一致: {fields[0]}" if len(fields) == 1 else f"不一致: {fields[0]}" + "、".join(fields[1:]) 
-                                    for idx, fields in index_to_discrepancies.items()]
-                    
-                    # 使用.loc进行批量更新，避免逐行操作
-                    merged_df.loc[update_indices, '比较结果'] = update_values
-    else:
-        # 使用标准对比模式 - 优化版本
-        logger.info("使用标准对比模式：优化版 - 先创建基础数据，再使用向量化操作进行比较")
-        
-        # 定义浮点数比较阈值
-        float_threshold = DEFAULT_FLOAT_THRESHOLD
-        
-        # 为两个DataFrame添加前缀并重置索引
-        std_df = standard_df.copy().add_prefix('标准数据_').reset_index().rename(columns={'_standard_date': '日期'})
-        chk_df = check_df.copy().add_prefix('检查数据_').reset_index().rename(columns={'_standard_date': '日期'})
-        
-        # 使用merge创建基础合并数据
-        merged_df = pd.merge(std_df, chk_df, on='日期', how='outer')
-        
-        # 添加数据来源和比较结果列
-        merged_df['数据来源'] = '两者都有'
-        merged_df['比较结果'] = '完全一致'
-        
-        # 找出只有标准数据或只有检查数据的日期
-        std_only_dates = set(standard_df.index) - set(check_df.index)
-        chk_only_dates = set(check_df.index) - set(standard_df.index)
-        
-        # 更新数据来源和比较结果
-        if std_only_dates:
-            merged_df.loc[merged_df['日期'].isin(std_only_dates), '数据来源'] = '仅标准数据'
-            merged_df.loc[merged_df['日期'].isin(std_only_dates), '比较结果'] = '仅标准数据存在'
-        
-        if chk_only_dates:
-            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '数据来源'] = '仅检查数据'
-            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '比较结果'] = '仅检查数据存在'
-        
-        # 对共同日期的数据进行向量化比较
-        if common_fields and total_common > 0:
-            common_dates_mask = merged_df['数据来源'] == '两者都有'
-            
-            # 为每个字段创建比较掩码
-            field_masks = {}
-            for field in common_fields:
-                std_field_col = standard_mapping[field]
-                chk_field_col = check_mapping[field]
-                
-                std_col_name = f'标准数据_{std_field_col}'
-                chk_col_name = f'检查数据_{chk_field_col}'
-                
-                if std_col_name in merged_df.columns and chk_col_name in merged_df.columns:
-                    # 使用向量化操作进行比较
-                    std_vals = merged_df.loc[common_dates_mask, std_col_name]
-                    chk_vals = merged_df.loc[common_dates_mask, chk_col_name]
-                    
-                    # 处理NaN情况
-                    both_notna = std_vals.notna() & chk_vals.notna()
-                    
-                    # 数值比较（使用numpy的isclose进行向量化比较）
-                    numeric_compare = np.zeros(len(std_vals), dtype=bool)
-                    numeric_mask = std_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                                 chk_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                                 both_notna
-                    
-                    if numeric_mask.any():
-                        numeric_compare[numeric_mask] = np.isclose(
-                            std_vals[numeric_mask].astype(float),
-                            chk_vals[numeric_mask].astype(float),
-                            atol=float_threshold
-                        )
-                    
-                    # 非数值比较（直接相等比较）
-                    non_numeric_mask = ~numeric_mask & both_notna
-                    if non_numeric_mask.any():
-                        numeric_compare[non_numeric_mask] = (std_vals[non_numeric_mask] == chk_vals[non_numeric_mask])
-                    
-                    # 所有情况的综合比较结果
-                    field_mask = numeric_compare | ~both_notna
-                    field_masks[field] = field_mask
-                    
-                    # 统计差异数量
-                    field_discrepancies[field] = (~field_mask).sum()
-            
-            # 更新比较结果列 - 优化为向量化操作
-            if field_masks:
-                # 创建一个字典来存储每个索引的不一致字段列表
-                index_to_discrepancies = {}
-                
-                # 收集所有不一致的信息
-                for field, mask in field_masks.items():
-                    # 获取不一致的行索引
-                    discrepancy_indices = merged_df[common_dates_mask].index[~mask]
-                    
-                    # 更新每个索引的不一致字段列表
-                    for idx in discrepancy_indices:
-                        if idx not in index_to_discrepancies:
-                            index_to_discrepancies[idx] = []
-                        index_to_discrepancies[idx].append(field)
-                
-                # 一次性生成所有需要更新的行索引和对应的值
-                if index_to_discrepancies:
-                    # 获取所有需要更新的索引
-                    update_indices = list(index_to_discrepancies.keys())
-                    
-                    # 为每个索引生成不一致字段的字符串
-                    update_values = [f"不一致: {fields[0]}" if len(fields) == 1 else f"不一致: {fields[0]}" + "、".join(fields[1:]) 
-                                    for idx, fields in index_to_discrepancies.items()]
-                    
-                    # 使用.loc进行批量更新，避免逐行操作
-                    merged_df.loc[update_indices, '比较结果'] = update_values
+            # 执行批量更新
+            merged_df.loc[update_indices, '比较结果'] = update_values
     
-    logger.info(f"合并完成，生成 {len(merged_df)} 条记录")
+    logger.info(f"比较完成，处理 {len(merged_df)} 条记录")
     
-    # 计算差异统计
+    # 10. 生成统计摘要
     total_merged = len(merged_df)
     std_only_count = (merged_df['数据来源'] == '仅标准数据').sum()
     chk_only_count = (merged_df['数据来源'] == '仅检查数据').sum()
@@ -517,29 +384,24 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
         'total_check': total_check,
         'total_merged': total_merged,
         'total_common': total_common,
-        'std_only_count': std_only_count,
-        'chk_only_count': chk_only_count,
         'coverage_rate': coverage_rate,
         'common_fields': sorted(common_fields),
         'field_discrepancies': field_discrepancies,
-        'field_discrepancy_rates': {},
+        'field_discrepancy_rates': {field: (field_discrepancies[field] / both_count * 100) 
+                                  if both_count > 0 else 0 for field in common_fields},
+        'std_only_count': std_only_count,
+        'chk_only_count': chk_only_count,
         'full_compare_mode': full_compare == 1
     }
     
-    # 计算每个字段的差异率
-    for field in common_fields:
-        if both_count > 0:
-            summary['field_discrepancy_rates'][field] = (field_discrepancies[field] / both_count) * 100
-        else:
-            summary['field_discrepancy_rates'][field] = 0
-    
-    # 调整列顺序，将重要信息放在前面
+    # 11. 调整列顺序，优化显示
     cols = merged_df.columns.tolist()
     important_cols = ['日期', '数据来源', '比较结果']
-    for col in important_cols:
+    for col in reversed(important_cols):
         if col in cols:
             cols.remove(col)
             cols.insert(0, col)
+    
     merged_df = merged_df[cols]
     
     return merged_df, summary
