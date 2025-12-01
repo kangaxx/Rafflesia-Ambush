@@ -476,19 +476,33 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
                     # 统计差异数量
                     field_discrepancies[field] = (~field_mask).sum()
             
-            # 更新比较结果列
+            # 更新比较结果列 - 优化为向量化操作
             if field_masks:
+                # 创建一个字典来存储每个索引的不一致字段列表
+                index_to_discrepancies = {}
+                
+                # 收集所有不一致的信息
                 for field, mask in field_masks.items():
                     # 获取不一致的行索引
                     discrepancy_indices = merged_df[common_dates_mask].index[~mask]
                     
-                    # 更新这些行的比较结果
+                    # 更新每个索引的不一致字段列表
                     for idx in discrepancy_indices:
-                        current_result = merged_df.at[idx, '比较结果']
-                        if current_result == '完全一致':
-                            merged_df.at[idx, '比较结果'] = f'不一致: {field}'
-                        else:
-                            merged_df.at[idx, '比较结果'] = f'{current_result}、{field}'
+                        if idx not in index_to_discrepancies:
+                            index_to_discrepancies[idx] = []
+                        index_to_discrepancies[idx].append(field)
+                
+                # 一次性生成所有需要更新的行索引和对应的值
+                if index_to_discrepancies:
+                    # 获取所有需要更新的索引
+                    update_indices = list(index_to_discrepancies.keys())
+                    
+                    # 为每个索引生成不一致字段的字符串
+                    update_values = [f"不一致: {fields[0]}" if len(fields) == 1 else f"不一致: {fields[0]}" + "、".join(fields[1:]) 
+                                    for idx, fields in index_to_discrepancies.items()]
+                    
+                    # 使用.loc进行批量更新，避免逐行操作
+                    merged_df.loc[update_indices, '比较结果'] = update_values
     
     logger.info(f"合并完成，生成 {len(merged_df)} 条记录")
     
