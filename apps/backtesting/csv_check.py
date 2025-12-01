@@ -2,13 +2,47 @@
 # -*- coding: utf-8 -*-
 """
 CSV文件时间对齐比较程序
-功能：将两份CSV文件按时间对齐数据，生成合并结果，并添加比较结果列
-参数：
-    1. 标准数据文件来源路径（基准数据源）- 仅支持CSV格式
-    2. 被检测数据来源路径（待检查数据源）- 仅支持CSV格式
-    3. 开始日期（可选）- 格式：YYYYMMDD，如不指定则从最早日期开始
-    4. 结束日期（可选）- 格式：YYYYMMDD，如不指定则到最晚日期结束
-    5. 结果文件路径（可选）- 完整的CSV文件路径，默认是当前目录下的"merged_result_" + 时间戳 + ".csv"
+
+功能说明：
+    1. 将两份CSV文件（标准数据源和被检测数据源）按时间维度对齐数据
+    2. 自动识别并规范化日期列，支持多种常见日期列名和格式
+    3. 根据配置的字段映射比较相应的数据值，生成差异报告
+    4. 支持时间范围筛选，可指定开始日期和结束日期
+    5. 提供两种数据合并模式，满足不同的比较需求
+    6. 生成详细的比较统计信息和结果文件
+
+支持的比较字段：
+    - 开盘价（open）
+    - 最高价（high）
+    - 最低价（low）
+    - 收盘价（close）
+    - 成交量（volume）
+    - 持仓量（持仓）
+
+命令行参数：
+    --standard, --std, -s    标准数据文件路径（基准数据源）
+    --check, -c             被检测数据文件路径（待检查数据源）
+    --start-date, -sd       开始日期（格式：YYYYMMDD，可选）
+    --end-date, -ed         结束日期（格式：YYYYMMDD，可选）
+    --output, -o            结果文件路径（可选，默认为标准文件名+_vs_检查文件名+_result.csv）
+    --full-compare, -fc     全部对比标志（0或1，默认0）
+                            0: 仅比较共同日期的数据
+                            1: 将全部数据按时间拼接写入结果
+
+使用示例：
+    基础比较：
+    python csv_check.py --standard 标准数据.csv --check 被检测数据.csv
+    
+    指定时间范围：
+    python csv_check.py --standard 标准数据.csv --check 被检测数据.csv --start-date 20230101 --end-date 20231231
+    
+    自定义输出文件并使用全部对比模式：
+    python csv_check.py --standard 标准数据.csv --check 被检测数据.csv --output 结果文件.csv --full-compare 1
+
+注意事项：
+    - 文件必须为CSV格式，且包含可识别的日期列
+    - 日期格式推荐使用YYYYMMDD（如20230101）
+    - 若未指定输出文件，将自动生成结果文件名
 """
 
 import os
@@ -16,6 +50,7 @@ import sys
 try:
     import pandas as pd
     import numpy as np
+    import argparse
 except ImportError as e:
     print(f"错误: 无法导入必要的库: {e}")
     print("请安装所需的库: pip install pandas numpy")
@@ -184,21 +219,20 @@ def load_data_from_file(file_path, start_date=None, end_date=None):
             # 添加标准化日期列用于后续处理
             df['_standard_date'] = df[date_column].apply(normalize_date)
             
+            # 移除无效日期
+            df = df.dropna(subset=['_standard_date'])
+            
             # 根据日期范围过滤
             if start_date:
                 df = df[df['_standard_date'] >= start_date]
             if end_date:
                 df = df[df['_standard_date'] <= end_date]
             
-            # 移除无效日期
-            df = df.dropna(subset=['_standard_date'])
+            # 为标准化日期列创建索引以提高查询速度
+            df = df.set_index('_standard_date')
             
-            # 创建日期映射（标准化日期到原始索引）
-            date_mapping = {}
-            for idx, row in df.iterrows():
-                date_str = row['_standard_date']
-                if date_str:
-                    date_mapping[date_str] = idx
+            # 直接从索引创建日期映射
+            date_mapping = {date_str: idx for idx, date_str in enumerate(df.index) if date_str}
             
             logger.info(f"从 {file_path} 加载并过滤了 {len(df)} 条记录")
             return df, date_column, date_mapping, field_mapping
@@ -212,7 +246,7 @@ def load_data_from_file(file_path, start_date=None, end_date=None):
         return None, None, None, None
 
 def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
-                     standard_mapping, check_mapping):
+                     standard_mapping, check_mapping, full_compare=0):
     """
     将两个数据源按时间对齐并比较字段值
     
@@ -223,108 +257,197 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
         check_date_col: 被检查数据源的原始日期列名
         standard_mapping: 标准数据源的字段映射
         check_mapping: 被检查数据源的字段映射
+        full_compare: 是否生成全部对比数据，0表示保持当前逻辑，1表示将全部数据按时间拼接
     
     Returns:
         tuple: (merged_df, summary)
             merged_df: 合并后的DataFrame，包含时间对齐的数据和比较结果
             summary: 比较结果摘要统计信息
     """
-    logger.info(f"开始按时间对齐比较两个数据源...")
+    logger.info(f"开始按时间对齐比较两个数据源，full_compare={full_compare}...")
     
-    # 获取所有唯一日期（标准化日期）
-    all_dates = sorted(set(standard_df['_standard_date']).union(set(check_df['_standard_date'])))
+    # 获取所有唯一日期（标准化日期）- 直接使用索引更高效
+    all_dates = sorted(set(standard_df.index).union(set(check_df.index)))
     logger.info(f"总共找到 {len(all_dates)} 个唯一日期")
     
     # 获取可比较的字段
     common_fields = set(standard_mapping.keys()) & set(check_mapping.keys())
     logger.info(f"找到 {len(common_fields)} 个可比较字段: {', '.join(sorted(common_fields))}")
     
-    # 创建合并后的结果列表
-    merged_data = []
-    field_discrepancies = {field: 0 for field in common_fields}
-    
-    # 定义浮点数比较阈值
-    float_threshold = DEFAULT_FLOAT_THRESHOLD
-    
-    for date_str in all_dates:
-        # 查找标准数据源中的数据
-        std_row = standard_df[standard_df['_standard_date'] == date_str]
-        std_exists = not std_row.empty
-        
-        # 查找被检查数据源中的数据
-        chk_row = check_df[check_df['_standard_date'] == date_str]
-        chk_exists = not chk_row.empty
-        
-        # 创建合并行，使用统一的日期列名
-        merged_row = {
-            '日期': date_str,  # 使用统一的日期列名
-            '_data_source': '两者都有' if std_exists and chk_exists else '仅标准数据' if std_exists else '仅检查数据',
-            '比较结果': '完全一致'  # 默认值
-        }
-        
-        # 添加标准数据源的所有字段值
-        if std_exists:
-            std_data = std_row.iloc[0]
-            # 添加所有原始字段，不只是映射的字段
-            for col in standard_df.columns:
-                if col not in ['_standard_date']:  # 跳过临时列
-                    merged_row[f'标准数据_{col}'] = std_data[col]
-        
-        # 添加被检查数据源的所有字段值
-        if chk_exists:
-            chk_data = chk_row.iloc[0]
-            # 添加所有原始字段，不只是映射的字段
-            for col in check_df.columns:
-                if col not in ['_standard_date']:  # 跳过临时列
-                    merged_row[f'检查数据_{col}'] = chk_data[col]
-        
-        # 比较共同字段值
-        if std_exists and chk_exists:
-            has_discrepancy = False
-            discrepancy_fields = []
-            
-            for field in common_fields:
-                std_field_col = standard_mapping[field]
-                chk_field_col = check_mapping[field]
-                
-                std_val = std_row.iloc[0][std_field_col]
-                chk_val = chk_row.iloc[0][chk_field_col]
-                
-                # 计算差异
-                diff_result, diff_info = compare_field_values(std_val, chk_val, field, float_threshold)
-                
-                if not diff_result:
-                    field_discrepancies[field] += 1
-                    has_discrepancy = True
-                    discrepancy_fields.append(field)
-            
-            # 设置比较结果
-            if has_discrepancy:
-                merged_row['比较结果'] = f'不一致: {"、".join(discrepancy_fields)}'
-            else:
-                merged_row['比较结果'] = '完全一致'
-        elif std_exists:
-            merged_row['比较结果'] = '仅标准数据存在'
-        else:
-            merged_row['比较结果'] = '仅检查数据存在'
-        
-        merged_data.append(merged_row)
-    
-    # 创建合并后的DataFrame
-    merged_df = pd.DataFrame(merged_data)
-    logger.info(f"合并完成，生成 {len(merged_df)} 条记录")
-    
-    # 计算统计信息
+    # 计算统计信息 - 直接使用索引更高效
     total_standard = len(standard_df)
     total_check = len(check_df)
-    total_common = len(set(standard_df['_standard_date']).intersection(set(check_df['_standard_date'])))
+    total_common = len(set(standard_df.index).intersection(set(check_df.index)))
     coverage_rate = (total_common / total_standard) * 100 if total_standard > 0 else 0
+    
+    if full_compare == 1:
+        # 生成全部对比数据模式
+        logger.info("使用全部对比模式：将两个数据源的所有字段按时间拼接")
+        
+        # 复制DataFrame以避免修改原始数据
+        std_df = standard_df.copy()
+        chk_df = check_df.copy()
+        
+        # 重命名列，添加前缀以区分不同数据源
+        std_df = std_df.add_prefix('标准数据_')
+        chk_df = chk_df.add_prefix('检查数据_')
+        
+        # 重置索引，以便可以将日期作为普通列
+        std_df = std_df.reset_index()
+        chk_df = chk_df.reset_index()
+        
+        # 重命名索引列（原_standard_date）为日期
+        std_df = std_df.rename(columns={'index': '日期'})
+        chk_df = chk_df.rename(columns={'index': '日期'})
+        
+        # 合并两个DataFrame，以日期为key
+        merged_df = pd.merge(std_df, chk_df, on='日期', how='outer')
+        
+        # 定义浮点数比较阈值
+        float_threshold = DEFAULT_FLOAT_THRESHOLD
+        
+        # 比较共同字段值
+        field_discrepancies = {field: 0 for field in common_fields}
+        both_count = total_common
+        
+        # 创建比较结果和数据来源列
+        merged_df['数据来源'] = '两者都有'
+        merged_df['比较结果'] = '完全一致'
+        
+        # 更新数据来源信息
+        std_only_dates = set(standard_df.index) - set(check_df.index)
+        chk_only_dates = set(check_df.index) - set(standard_df.index)
+        
+        if std_only_dates:
+            merged_df.loc[merged_df['日期'].isin(std_only_dates), '数据来源'] = '仅标准数据'
+            merged_df.loc[merged_df['日期'].isin(std_only_dates), '比较结果'] = '仅标准数据存在'
+        
+        if chk_only_dates:
+            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '数据来源'] = '仅检查数据'
+            merged_df.loc[merged_df['日期'].isin(chk_only_dates), '比较结果'] = '仅检查数据存在'
+        
+        # 对共同日期的数据进行比较
+        if common_fields and both_count > 0:
+            common_dates_df = merged_df[merged_df['数据来源'] == '两者都有'].copy()
+            
+            for index, row in common_dates_df.iterrows():
+                date_str = row['日期']
+                has_discrepancy = False
+                discrepancy_fields = []
+                
+                for field in common_fields:
+                    std_field_col = standard_mapping[field]
+                    chk_field_col = check_mapping[field]
+                    
+                    # 查找标准数据和检查数据中的对应列名
+                    std_col_name = f'标准数据_{std_field_col}'
+                    chk_col_name = f'检查数据_{chk_field_col}'
+                    
+                    if std_col_name in row.index and chk_col_name in row.index:
+                        std_val = row[std_col_name]
+                        chk_val = row[chk_col_name]
+                        
+                        # 计算差异
+                        diff_result, diff_info = compare_field_values(std_val, chk_val, field, float_threshold)
+                        
+                        if not diff_result:
+                            field_discrepancies[field] += 1
+                            has_discrepancy = True
+                            discrepancy_fields.append(field)
+                
+                # 更新比较结果
+                if has_discrepancy:
+                    merged_df.at[index, '比较结果'] = f'不一致: {"、".join(discrepancy_fields)}'
+                else:
+                    merged_df.at[index, '比较结果'] = '完全一致'
+    else:
+        # 使用原来的逻辑
+        logger.info("使用标准对比模式：按行处理并添加比较结果")
+        
+        # 创建合并后的结果列表
+        merged_data = []
+        field_discrepancies = {field: 0 for field in common_fields}
+        
+        # 定义浮点数比较阈值
+        float_threshold = DEFAULT_FLOAT_THRESHOLD
+        
+        for date_str in all_dates:
+            # 查找标准数据源中的数据 - 使用索引查询更高效
+            std_exists = date_str in standard_df.index
+            std_row = standard_df.loc[[date_str]] if std_exists else pd.DataFrame()
+            
+            # 查找被检查数据源中的数据 - 使用索引查询更高效
+            chk_exists = date_str in check_df.index
+            chk_row = check_df.loc[[date_str]] if chk_exists else pd.DataFrame()
+            
+            # 创建合并行，使用统一的日期列名
+            merged_row = {
+                '日期': date_str,  # 使用统一的日期列名
+                '_data_source': '两者都有' if std_exists and chk_exists else '仅标准数据' if std_exists else '仅检查数据',
+                '比较结果': '完全一致'  # 默认值
+            }
+            
+            # 添加标准数据源的所有字段值
+            if std_exists:
+                std_data = std_row.iloc[0]
+                # 添加所有原始字段，不只是映射的字段
+                for col in standard_df.columns:
+                    if col not in ['_standard_date']:  # 跳过临时列
+                        merged_row[f'标准数据_{col}'] = std_data[col]
+            
+            # 添加被检查数据源的所有字段值
+            if chk_exists:
+                chk_data = chk_row.iloc[0]
+                # 添加所有原始字段，不只是映射的字段
+                for col in check_df.columns:
+                    if col not in ['_standard_date']:  # 跳过临时列
+                        merged_row[f'检查数据_{col}'] = chk_data[col]
+            
+            # 比较共同字段值
+            if std_exists and chk_exists:
+                has_discrepancy = False
+                discrepancy_fields = []
+                
+                for field in common_fields:
+                    std_field_col = standard_mapping[field]
+                    chk_field_col = check_mapping[field]
+                    
+                    std_val = std_row.iloc[0][std_field_col]
+                    chk_val = chk_row.iloc[0][chk_field_col]
+                    
+                    # 计算差异
+                    diff_result, diff_info = compare_field_values(std_val, chk_val, field, float_threshold)
+                    
+                    if not diff_result:
+                        field_discrepancies[field] += 1
+                        has_discrepancy = True
+                        discrepancy_fields.append(field)
+                
+                # 设置比较结果
+                if has_discrepancy:
+                    merged_row['比较结果'] = f'不一致: {"、".join(discrepancy_fields)}'
+                else:
+                    merged_row['比较结果'] = '完全一致'
+            elif std_exists:
+                merged_row['比较结果'] = '仅标准数据存在'
+            else:
+                merged_row['比较结果'] = '仅检查数据存在'
+            
+            merged_data.append(merged_row)
+        
+        # 创建合并后的DataFrame
+        merged_df = pd.DataFrame(merged_data)
+        
+        # 重命名_data_source列为更友好的名称
+        merged_df = merged_df.rename(columns={'_data_source': '数据来源'})
+    
+    logger.info(f"合并完成，生成 {len(merged_df)} 条记录")
     
     # 计算差异统计
     total_merged = len(merged_df)
-    std_only_count = (merged_df['_data_source'] == '仅标准数据').sum()
-    chk_only_count = (merged_df['_data_source'] == '仅检查数据').sum()
-    both_count = (merged_df['_data_source'] == '两者都有').sum()
+    std_only_count = (merged_df['数据来源'] == '仅标准数据').sum()
+    chk_only_count = (merged_df['数据来源'] == '仅检查数据').sum()
+    both_count = (merged_df['数据来源'] == '两者都有').sum()
     
     summary = {
         'total_standard': total_standard,
@@ -336,7 +459,8 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
         'coverage_rate': coverage_rate,
         'common_fields': sorted(common_fields),
         'field_discrepancies': field_discrepancies,
-        'field_discrepancy_rates': {}
+        'field_discrepancy_rates': {},
+        'full_compare_mode': full_compare == 1
     }
     
     # 计算每个字段的差异率
@@ -345,9 +469,6 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col,
             summary['field_discrepancy_rates'][field] = (field_discrepancies[field] / both_count) * 100
         else:
             summary['field_discrepancy_rates'][field] = 0
-    
-    # 重命名_data_source列为更友好的名称
-    merged_df = merged_df.rename(columns={'_data_source': '数据来源'})
     
     # 调整列顺序，将重要信息放在前面
     cols = merged_df.columns.tolist()
@@ -458,39 +579,75 @@ def main():
     """
     主函数
     """
-    # 检查命令行参数
-    if len(sys.argv) < 3 or len(sys.argv) > 6:
-        logger.error("使用方法: python csv_check.py <标准数据文件路径> <被检测数据文件路径> [开始日期YYYYMMDD] [结束日期YYYYMMDD] [结果文件路径]")
-        sys.exit(1)
+    # 创建参数解析器
+    parser = argparse.ArgumentParser(
+        description='CSV文件时间对齐比较程序 - 用于比较两份CSV格式的数据文件，按时间维度对齐并生成详细比较报告',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+功能概述:
+  本程序用于金融数据质量检查，能够将标准数据源与待检测数据源进行时间对齐，
+  自动识别和匹配相应字段，比较数据差异，并生成详细的比较结果。
+
+比较逻辑:
+  - 自动识别并规范化两份文件中的日期列
+  - 根据配置的字段映射关系匹配对应的字段（如开盘价、收盘价等）
+  - 计算共同日期的数据差异
+  - 统计差异数量和详细信息
+
+使用示例:
+  # 基础比较：比较两份文件中的所有共同日期数据
+  python csv_check.py --standard 标准数据.csv --check 被检测数据.csv
+  
+  # 指定时间范围：只比较2023年的数据
+  python csv_check.py --standard 标准数据.csv --check 被检测数据.csv --start-date 20230101 --end-date 20231231
+  
+  # 自定义输出文件并使用全部对比模式
+  python csv_check.py --standard 标准数据.csv --check 被检测数据.csv --output 比较结果.csv --full-compare 1
+  
+  # 使用简写参数
+  python csv_check.py -s 标准数据.csv -c 被检测数据.csv -sd 20230101 -ed 20231231 -o 结果.csv
+
+详细帮助:
+  运行 'python csv_check.py -h' 或 'python csv_check.py --help' 查看此帮助信息
+        """)
     
-    standard_file_path = sys.argv[1]
-    check_file_path = sys.argv[2]
+    # 添加必要参数
+    parser.add_argument('--standard', '--std', '-s', required=True,
+                        help='标准数据文件路径（基准数据源），作为对比的参考标准')
+    parser.add_argument('--check', '-c', required=True,
+                        help='被检测数据文件路径（待检查数据源），需要验证的数据文件')
     
-    # 处理可选参数
-    start_date = None
-    end_date = None
-    output_file_path = None
+    # 添加可选参数
+    parser.add_argument('--start-date', '-sd',
+                        help='开始日期（格式：YYYYMMDD），仅比较此日期之后的数据')
+    parser.add_argument('--end-date', '-ed',
+                        help='结束日期（格式：YYYYMMDD），仅比较此日期之前的数据')
+    parser.add_argument('--output', '-o',
+                        help='结果文件路径，若不指定将自动生成')
+    parser.add_argument('--full-compare', '-fc', type=int, choices=[0, 1], default=0,
+                        help='全部对比标志（0：仅比较共同日期的数据；1：将全部数据按时间拼接；默认0）')
     
     # 解析参数
-    arg_index = 3
-    while arg_index < len(sys.argv):
-        arg = sys.argv[arg_index]
-        # 判断是否为日期参数
-        if validate_date_format(arg):
-            if start_date is None:
-                start_date = arg
-            elif end_date is None:
-                end_date = arg
-            else:
-                logger.error(f"过多的日期参数: {arg}")
-                sys.exit(1)
-        # 否则视为结果文件路径
-        elif output_file_path is None:
-            output_file_path = arg
-        else:
-            logger.error(f"过多的参数: {arg}")
-            sys.exit(1)
-        arg_index += 1
+    args = parser.parse_args()
+    
+    # 提取参数值
+    standard_file_path = args.standard
+    check_file_path = args.check
+    start_date = args.start_date
+    end_date = args.end_date
+    output_file_path = args.output
+    full_compare = args.full_compare
+    
+    # 验证日期格式
+    if start_date and not validate_date_format(start_date):
+        logger.error(f"无效的开始日期格式: {start_date}，正确格式为YYYYMMDD")
+        parser.print_help()
+        sys.exit(1)
+    
+    if end_date and not validate_date_format(end_date):
+        logger.error(f"无效的结束日期格式: {end_date}，正确格式为YYYYMMDD")
+        parser.print_help()
+        sys.exit(1)
     
     # 验证开始日期不晚于结束日期
     if start_date and end_date and start_date > end_date:
@@ -531,7 +688,8 @@ def main():
     merged_df, summary = merge_and_compare(
         standard_df, check_df, 
         standard_date_col, check_date_col,
-        standard_mapping, check_mapping
+        standard_mapping, check_mapping,
+        full_compare
     )
     
     # 打印结果摘要
