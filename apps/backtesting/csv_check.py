@@ -38,7 +38,7 @@ FIELDS_TO_COMPARE = {
     'low': ['low', '最低价', '最低'],
     'close': ['close', '收盘价', '收盘'],
     'volume': ['volume', '成交量', '量'],
-    '持仓': ['持仓', '持仓量', 'position', 'open_interest']
+    '持仓': ['持仓', '持仓量', 'position', 'open_interest', 'oi', 'OI', 'Oi']
 }
 
 # 时间对齐比较相关配置
