@@ -37,7 +37,7 @@ FIELDS_TO_COMPARE = {
     'high': ['high', '最高价', '最高'],
     'low': ['low', '最低价', '最低'],
     'close': ['close', '收盘价', '收盘'],
-    'volume': ['volume', '成交量', '量'],
+    'volume': ['volume', '成交量', '量', 'vol', 'VOL', 'Vol'],
     '持仓': ['持仓', '持仓量', 'position', 'open_interest', 'oi', 'OI', 'Oi']
 }
 
