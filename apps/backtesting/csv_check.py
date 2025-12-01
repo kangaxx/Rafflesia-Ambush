@@ -247,7 +247,7 @@ def load_data_from_file(file_path, start_date=None, end_date=None):
 
 def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col, standard_mapping, check_mapping, full_compare=0):
     """
-    全新的数据比较算法：高效比较两个CSV文件的数据
+    创建比较结果DataFrame，包含特定字段并正确写入数据
     
     Args:
         standard_df: 标准数据源的DataFrame
@@ -256,155 +256,122 @@ def merge_and_compare(standard_df, check_df, standard_date_col, check_date_col, 
         check_date_col: 被检查数据源的原始日期列名
         standard_mapping: 标准数据源的字段映射
         check_mapping: 被检查数据源的字段映射
-        full_compare: 比较模式
+        full_compare: 比较模式（这里不使用）
     
     Returns:
         tuple: (merged_df, summary)
-            merged_df: 合并后的DataFrame
+            merged_df: 包含特定字段的比较结果DataFrame
             summary: 比较结果摘要
     """
-    logger.info("执行全新的数据比较算法...")
+    logger.info("创建指定格式的比较结果DataFrame...")
     
-    # 1. 计算基础统计信息
-    total_standard = len(standard_df)
-    total_check = len(check_df)
+    # 确保两个DataFrame有相同的行数（按日期对齐）
+    # 首先将两个DataFrame都按日期列设置索引
+    std_df_indexed = standard_df.set_index(standard_date_col)
+    chk_df_indexed = check_df.set_index(check_date_col)
     
-    # 2. 确定共同日期和覆盖率
-    std_dates = set(standard_df.index)
-    chk_dates = set(check_df.index)
-    common_dates = std_dates & chk_dates
-    total_common = len(common_dates)
-    coverage_rate = (total_common / total_standard * 100) if total_standard > 0 else 0
+    # 获取共同的日期
+    common_dates = std_df_indexed.index.intersection(chk_df_indexed.index)
     
-    # 3. 准备数据 - 统一处理
-    std_df = standard_df.copy().add_prefix('标准数据_')
-    chk_df = check_df.copy().add_prefix('检查数据_')
+    # 只保留共同日期的数据
+    std_df_common = std_df_indexed.loc[common_dates].reset_index()
+    chk_df_common = chk_df_indexed.loc[common_dates].reset_index()
     
-    # 重置索引并标准化日期列
-    std_df = std_df.reset_index().rename(columns={'_standard_date': '日期'})
-    chk_df = chk_df.reset_index().rename(columns={'_standard_date': '日期'})
+    # 创建结果DataFrame，确保行数与共同日期数一致
+    result_df = pd.DataFrame(index=range(len(std_df_common)))
     
-    # 4. 合并数据
-    merged_df = pd.merge(std_df, chk_df, on='日期', how='outer')
+    # 添加symbol字段
+    if 'symbol' in std_df_common.columns:
+        result_df['symbol'] = std_df_common['symbol']
+    elif 'code' in std_df_common.columns:
+        result_df['symbol'] = std_df_common['code']
+    else:
+        result_df['symbol'] = 'Unknown'  # 默认值
     
-    # 5. 初始化元数据列
-    merged_df['数据来源'] = '两者都有'
-    merged_df['比较结果'] = '完全一致'
+    # 添加标准数据时间字段
+    result_df['s_date_time'] = std_df_common[standard_date_col]
     
-    # 6. 标记数据来源
-    std_only_dates = std_dates - chk_dates
-    chk_only_dates = chk_dates - std_dates
-    
-    if std_only_dates:
-        mask = merged_df['日期'].isin(std_only_dates)
-        merged_df.loc[mask, ['数据来源', '比较结果']] = ['仅标准数据', '仅标准数据存在']
-    
-    if chk_only_dates:
-        mask = merged_df['日期'].isin(chk_only_dates)
-        merged_df.loc[mask, ['数据来源', '比较结果']] = ['仅检查数据', '仅检查数据存在']
-    
-    # 7. 确定可比较字段
-    common_fields = set(standard_mapping.keys()) & set(check_mapping.keys())
-    field_discrepancies = {field: 0 for field in common_fields}
-    
-    # 8. 执行向量化比较（仅针对共同日期）
-    if common_fields and total_common > 0:
-        both_data_mask = merged_df['数据来源'] == '两者都有'
-        both_data_indices = merged_df[both_data_mask].index
-        
-        # 创建字段差异记录器
-        index_discrepancies = {}
-        
-        # 对每个字段执行向量化比较
-        for field in common_fields:
-            std_col = f'标准数据_{standard_mapping[field]}'
-            chk_col = f'检查数据_{check_mapping[field]}'
-            
-            if std_col in merged_df.columns and chk_col in merged_df.columns:
-                # 获取比较数据
-                std_vals = merged_df.loc[both_data_mask, std_col]
-                chk_vals = merged_df.loc[both_data_mask, chk_col]
-                
-                # 向量化比较逻辑
-                both_notna = std_vals.notna() & chk_vals.notna()
-                
-                # 数值比较（使用np.isclose处理浮点精度）
-                numeric_mask = std_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                              chk_vals.apply(lambda x: isinstance(x, (int, float))) & \
-                              both_notna
-                
-                # 初始化比较结果
-                match_result = pd.Series(False, index=std_vals.index)
-                
-                # 处理数值比较
-                if numeric_mask.any():
-                    match_result[numeric_mask] = np.isclose(
-                        std_vals[numeric_mask].astype(float),
-                        chk_vals[numeric_mask].astype(float),
-                        atol=DEFAULT_FLOAT_THRESHOLD
-                    )
-                
-                # 处理非数值比较
-                non_numeric_mask = ~numeric_mask & both_notna
-                if non_numeric_mask.any():
-                    match_result[non_numeric_mask] = (std_vals[non_numeric_mask] == chk_vals[non_numeric_mask])
-                
-                # 处理缺失值情况
-                match_result[~both_notna] = True
-                
-                # 记录差异
-                discrepancy_indices = match_result[~match_result].index
-                field_discrepancies[field] = len(discrepancy_indices)
-                
-                # 更新索引差异记录器
-                for idx in discrepancy_indices:
-                    if idx not in index_discrepancies:
-                        index_discrepancies[idx] = []
-                    index_discrepancies[idx].append(field)
-        
-        # 9. 批量更新比较结果列
-        if index_discrepancies:
-            # 准备更新数据
-            update_indices = list(index_discrepancies.keys())
-            update_values = [f"不一致: {', '.join(fields)}" for fields in index_discrepancies.values()]
-            
-            # 执行批量更新
-            merged_df.loc[update_indices, '比较结果'] = update_values
-    
-    logger.info(f"比较完成，处理 {len(merged_df)} 条记录")
-    
-    # 10. 生成统计摘要
-    total_merged = len(merged_df)
-    std_only_count = (merged_df['数据来源'] == '仅标准数据').sum()
-    chk_only_count = (merged_df['数据来源'] == '仅检查数据').sum()
-    both_count = (merged_df['数据来源'] == '两者都有').sum()
-    
-    summary = {
-        'total_standard': total_standard,
-        'total_check': total_check,
-        'total_merged': total_merged,
-        'total_common': total_common,
-        'coverage_rate': coverage_rate,
-        'common_fields': sorted(common_fields),
-        'field_discrepancies': field_discrepancies,
-        'field_discrepancy_rates': {field: (field_discrepancies[field] / both_count * 100) 
-                                  if both_count > 0 else 0 for field in common_fields},
-        'std_only_count': std_only_count,
-        'chk_only_count': chk_only_count,
-        'full_compare_mode': full_compare == 1
+    # 添加标准数据价格和交易量字段
+    std_fields_map = {
+        'open': ['open', '开盘价'],
+        'high': ['high', '最高价'],
+        'low': ['low', '最低价'],
+        'close': ['close', '收盘价'],
+        'oi': ['oi', '持仓量'],
+        'vol': ['vol', '成交量']
     }
     
-    # 11. 调整列顺序，优化显示
-    cols = merged_df.columns.tolist()
-    important_cols = ['日期', '数据来源', '比较结果']
-    for col in reversed(important_cols):
-        if col in cols:
-            cols.remove(col)
-            cols.insert(0, col)
+    for field, possible_names in std_fields_map.items():
+        std_col = f's_{field}'
+        # 首先尝试通过字段映射获取
+        mapped_field = None
+        for key, value in standard_mapping.items():
+            if value.lower() == field or key.lower() == field:
+                mapped_field = value
+                break
+        
+        # 如果映射找到了并且存在于DataFrame中
+        if mapped_field and mapped_field in std_df_common.columns:
+            result_df[std_col] = std_df_common[mapped_field]
+        else:
+            # 尝试可能的字段名
+            for name in possible_names:
+                if name in std_df_common.columns:
+                    result_df[std_col] = std_df_common[name]
+                    break
+            else:
+                # 如果都找不到，设置为None
+                result_df[std_col] = None
     
-    merged_df = merged_df[cols]
+    # 添加目标数据时间字段
+    result_df['c_date_time'] = chk_df_common[check_date_col]
     
-    return merged_df, summary
+    # 添加目标数据价格和交易量字段
+    chk_fields_map = {
+        'high': ['high', '最高价'],
+        'low': ['low', '最低价'],
+        'close': ['close', '收盘价'],
+        'oi': ['oi', '持仓量'],
+        'vol': ['vol', '成交量']
+    }
+    
+    for field, possible_names in chk_fields_map.items():
+        chk_col = f'c_{field}'
+        # 首先尝试通过字段映射获取
+        mapped_field = None
+        for key, value in check_mapping.items():
+            if value.lower() == field or key.lower() == field:
+                mapped_field = value
+                break
+        
+        # 如果映射找到了并且存在于DataFrame中
+        if mapped_field and mapped_field in chk_df_common.columns:
+            result_df[chk_col] = chk_df_common[mapped_field]
+        else:
+            # 尝试可能的字段名
+            for name in possible_names:
+                if name in chk_df_common.columns:
+                    result_df[chk_col] = chk_df_common[name]
+                    break
+            else:
+                # 如果都找不到，设置为None
+                result_df[chk_col] = None
+    
+    # 添加比较结果字段
+    result_df['result'] = '需比较'
+    
+    # 生成基本的摘要信息
+    summary = {
+        'total_standard': len(standard_df),
+        'total_check': len(check_df),
+        'total_common_dates': len(common_dates),
+        'total_compared': len(result_df),
+        'common_fields': list(set(standard_mapping.keys()) & set(check_mapping.keys()))
+    }
+    
+    logger.info(f"比较结果DataFrame创建完成，共 {len(result_df)} 条记录")
+    
+    return result_df, summary
 
 def compare_field_values(std_val, chk_val, field_name, float_threshold=1e-6):
     """
