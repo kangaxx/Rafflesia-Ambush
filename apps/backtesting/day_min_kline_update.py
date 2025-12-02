@@ -58,6 +58,10 @@ def parse_arguments():
     parser.add_argument('-m', '--mode', type=int, default=0, choices=[0, 1],
                         help='运行模式：0(自动模式), 1(手动模式)，默认为0')
   
+    # 添加分钟数据频率参数
+    parser.add_argument('--freqs', type=str, default='1',
+                        help='分钟数据频率，支持1、5、15、30分钟，可以组合使用，用逗号分隔，例如: "1,5,15"，默认为1(分钟)')
+  
     # 添加配置文件参数
     parser.add_argument('--config', type=str, default='default_param_list.json',
                         help='配置文件路径，默认为同目录下的default_param_list.json')
@@ -1057,13 +1061,71 @@ def main():
             if df_shfe_products is None or df_shfe_products.empty:
                 df_shfe_products = get_all_shfe_products(pro)
             
+            # 根据-c参数筛选期货产品
             if df_shfe_products is not None and not df_shfe_products.empty:
-                min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode)
-                logger.info(f"期货产品分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
-                min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq='5min')
-                logger.info(f"期货产品5分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
-                min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq='15min')
-                logger.info(f"期货产品15分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
+                # 如果用户通过-c参数指定了合约，进行筛选
+                if contracts and len(contracts) > 0:
+                    # 提取合约代码（去掉交易所后缀）
+                    contract_codes = [c.split('.')[0] for c in contracts if '.' in c]
+                    logger.info(f"根据-c参数筛选期货产品，将从{len(df_shfe_products)}个产品中筛选出与{len(contract_codes)}个指定合约匹配的产品")
+                    
+                    # 筛选出fut_code在contract_codes中的产品
+                    df_shfe_products = df_shfe_products[df_shfe_products['fut_code'].isin(contract_codes)]
+                    logger.info(f"筛选后剩余{len(df_shfe_products)}个期货产品")
+                    
+                    if df_shfe_products.empty:
+                        logger.warning("筛选后没有匹配的期货产品，跳过分钟级k线数据下载")
+                    else:
+                        # 解析频率参数
+                        valid_freqs = {'1': '1min', '5': '5min', '15': '15min', '30': '30min'}
+                        requested_freqs = [f.strip() for f in args.freqs.split(',')]
+                        
+                        # 验证并获取有效的频率列表
+                        actual_freqs = []
+                        for freq in requested_freqs:
+                            if freq in valid_freqs:
+                                actual_freqs.append(freq)
+                            else:
+                                logger.warning(f"无效的频率值: {freq}，有效值为1、5、15、30")
+                        
+                        # 如果没有有效的频率，默认使用1分钟
+                        if not actual_freqs:
+                            logger.info("未指定有效频率，默认使用1分钟频率")
+                            actual_freqs = ['1']
+                        
+                        logger.info(f"将下载的分钟频率: {', '.join(actual_freqs)}分钟")
+                        
+                        # 对每个有效频率下载数据
+                        for freq in actual_freqs:
+                            freq_str = valid_freqs[freq]
+                            min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq=freq_str)
+                            logger.info(f"期货产品{freq}分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
+                else:
+                    # 没有指定合约参数，使用所有产品
+                    # 解析频率参数
+                    valid_freqs = {'1': '1min', '5': '5min', '15': '15min', '30': '30min'}
+                    requested_freqs = [f.strip() for f in args.freqs.split(',')]
+                    
+                    # 验证并获取有效的频率列表
+                    actual_freqs = []
+                    for freq in requested_freqs:
+                        if freq in valid_freqs:
+                            actual_freqs.append(freq)
+                        else:
+                            logger.warning(f"无效的频率值: {freq}，有效值为1、5、15、30")
+                    
+                    # 如果没有有效的频率，默认使用1分钟
+                    if not actual_freqs:
+                        logger.info("未指定有效频率，默认使用1分钟频率")
+                        actual_freqs = ['1']
+                    
+                    logger.info(f"将下载的分钟频率: {', '.join(actual_freqs)}分钟")
+                    
+                    # 对每个有效频率下载数据
+                    for freq in actual_freqs:
+                        freq_str = valid_freqs[freq]
+                        min_download_stats = _download_future_minute_data(df_shfe_products, pro, config, mode=args.mode, freq=freq_str)
+                        logger.info(f"期货产品{freq}分钟级k线数据下载统计: 成功 {min_download_stats['success']} 个, 失败 {min_download_stats['fail']} 个")
             else:
                 logger.warning("未能获取上期所期货产品信息，跳过分钟级k线数据下载")
         fail_count = 0
