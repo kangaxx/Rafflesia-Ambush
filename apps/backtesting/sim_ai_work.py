@@ -185,6 +185,9 @@ def predict(historical_data, as_dict=False):
     Returns:
         pd.DataFrame or list[dict]: 预测的未来三天K线数据
     """
+    # 添加打印信息
+    print("[sim_ai_work] predict 函数被调用")
+    
     # 调用核心预测函数
     pred_df = _predict_core(historical_data)
     
@@ -204,6 +207,9 @@ def predict_next_three_days(historical_data, output_file='predictor.csv'):
     Returns:
         pd.DataFrame: 预测的未来三天K线数据
     """
+    # 添加打印信息
+    print("[sim_ai_work] predict_next_three_days 函数被调用")
+    
     # 转换为DataFrame格式
     if isinstance(historical_data, dict):
         df = pd.DataFrame([historical_data])
