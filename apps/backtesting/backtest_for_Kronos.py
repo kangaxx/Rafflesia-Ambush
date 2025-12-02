@@ -1,3 +1,52 @@
+"""
+基于AI预测的交易回测系统
+
+该程序使用backtrader框架实现了一个基于AI预测的交易策略回测系统。
+主要功能包括：
+- 读取历史K线数据
+- 使用AI预测模块预测未来价格走势
+- 基于预测结果执行买入操作
+- 实现止损和动态止盈机制
+- 输出详细的交易日志和回测统计结果
+
+使用方法：
+    python backtest_for_Kronos.py
+
+默认使用的数据文件：./Data/RB9999.csv
+
+策略特点：
+- 预测上涨则买入
+- 下跌3%止损
+- 初始5%止盈，后续使用2%跟踪止损动态调整止盈点
+- 单次交易固定10手
+- 有持仓时不进行新的买入
+- 支持当天平仓和非当天平仓的不同手续费计算
+
+重要参数（可在AI_Prediction_Strategy类的params中调整）：
+- stop_loss_pct: 止损百分比，默认0.03（3%）
+- take_profit_pct: 初始止盈百分比，默认0.05（5%）
+- trailing_stop_pct: 跟踪止损百分比，默认0.02（2%）
+- trade_size: 单次交易手数，默认10手
+- buy_fee: 买入手续费，默认6.2元
+- same_day_sell_fee: 当天卖出手续费，默认6.2元
+- margin_rate: 保证金率，默认0.17（17%）
+- multiplier: 合约乘数，默认10
+
+回测结果分析：
+程序会输出初始资金、最终资金、总收益率、夏普比率、最大回撤等关键指标，并尝试绘制回测结果图表。
+
+依赖模块：
+- backtrader: 回测框架
+- pandas: 数据处理
+- numpy: 数值计算
+- sim_ai_work: 自定义的AI预测模块
+
+注意事项：
+1. 请确保数据文件格式正确，包含必要的字段：trade_date, open, high, low, close, vol
+2. 绘制图表需要tkinter模块支持
+3. 回测结果仅供参考，实际交易可能因滑点、流动性等因素而有所不同
+"""
+
 import backtrader as bt
 import pandas as pd
 import numpy as np
@@ -6,6 +55,8 @@ import os
 
 # 导入AI预测模块
 from sim_ai_work import predict
+# 导入文件路径查找函数
+from find_file_path import find_file_path
 
 # 设置随机种子以确保结果可复现
 import random
@@ -410,13 +461,19 @@ def run_backtest(data_file):
         print(f"警告: 绘制图表时出错: {e}")
 
 if __name__ == '__main__':
-    # 数据文件路径
-    data_file = './Data/RB9999.csv'
+    # 使用find_file_path函数查找数据文件
+    data_file = find_file_path('RB9999.csv')
     
     # 检查文件是否存在
-    if not os.path.exists(data_file):
-        print(f"错误: 找不到数据文件 {data_file}")
+    if not data_file:
+        print(f"错误: 找不到数据文件 RB9999.csv")
+        print("请确保文件存在于以下任一位置:")
+        print("1. 当前目录下的 ./Data 文件夹")
+        print("2. 当前目录下的 ./data 文件夹")
+        print("3. default_param_list.json 中配置的 tushare_root + index 路径下")
         exit(1)
+    
+    print(f"使用数据文件: {data_file}")
     
     # 运行回测
     run_backtest(data_file)
