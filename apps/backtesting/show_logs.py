@@ -20,6 +20,14 @@ def parse_args() -> Tuple[Path, Optional[str], float]:
         description="监控日志目录变化并可按文件模板打印新增行（默认目录: ./logs）",
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
+    # 显式添加 -h/--help，以便在帮助中显示自定义帮助说明
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        help="显示此帮助信息并退出",
     )
     parser.add_argument(
         "logs_dir",
