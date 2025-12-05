@@ -6,6 +6,8 @@ from typing import Dict, Tuple, Optional
 from datetime import datetime
 import sys
 
+DEFAULT_TEMPLATE = "app_info_%YYYY%-%MM%-%DD%.log"
+
 def parse_args() -> Tuple[Path, Optional[str], float]:
     epilog = (
         "示例:\n"
@@ -15,6 +17,7 @@ def parse_args() -> Tuple[Path, Optional[str], float]:
         "说明:\n"
         "  支持的占位符: %YYYY% 年 (4 位), %MM% 月 (2 位), %DD% 日 (2 位)\n"
         "  当使用 -f 指定模板时，程序每次轮询都会按当前日期解析模板并监控对应文件的新增行。\n"
+        f"  默认 -f: {DEFAULT_TEMPLATE}\n"
     )
     parser = argparse.ArgumentParser(
         description="监控日志目录变化并可按文件模板打印新增行（默认目录: ./logs）",
@@ -22,12 +25,8 @@ def parse_args() -> Tuple[Path, Optional[str], float]:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
     )
-    # 显式添加 -h/--help，以便在帮助中显示自定义帮助说明
     parser.add_argument(
-        "-h",
-        "--help",
-        action="help",
-        help="显示此帮助信息并退出",
+        "-h", "--help", action="help", help="显示此帮助信息并退出"
     )
     parser.add_argument(
         "logs_dir",
@@ -39,7 +38,8 @@ def parse_args() -> Tuple[Path, Optional[str], float]:
         "-f",
         "--file",
         dest="target_file",
-        help="仅监控指定的文件名或模板（支持 %YYYY% %MM% %DD%），只匹配文件名，不含路径",
+        default=DEFAULT_TEMPLATE,
+        help="仅监控指定的文件名或模板（支持 %YYYY% %MM% %DD%），只匹配文件名，不含路径。默认为 `app_info_%YYYY%-%MM%-%DD%.log`",
     )
     parser.add_argument(
         "-i",
@@ -114,9 +114,19 @@ def monitor(dir_path: Path, target_template: Optional[str] = None, interval: flo
 
     known = scan_files(dir_path, resolved)
     positions: Dict[Path, int] = {}
+
+    # 启动时：对已存在的被监控文件打印全部内容（第一次读取）
     for p, (mtime, size) in sorted(known.items()):
         print(f"已存在: {p.name} (mtime={mtime})")
-        positions[p] = size
+        pos = _print_new_content(p, 0)
+        positions[p] = pos
+
+    # 如果使用模板，但当前目录中没有解析得到的文件，提示一次
+    last_missing: Optional[str] = None
+    if target_template and resolved:
+        if not any(p.name == resolved for p in known.keys()):
+            print(f"未找到文件: `{resolved}`，将在目录 ` {dir_path} ` 中等待该文件出现。")
+            last_missing = resolved
 
     try:
         while True:
@@ -124,12 +134,22 @@ def monitor(dir_path: Path, target_template: Optional[str] = None, interval: flo
             resolved = resolve_template(target_template) if target_template else None
             current = scan_files(dir_path, resolved)
 
+            # 如果模板解析出文件名但当前目录没有该文件，且之前未报告过相同的缺失，打印提示
+            if target_template and resolved:
+                exists_now = any(p.name == resolved for p in current.keys())
+                if not exists_now and last_missing != resolved:
+                    print(f"未找到文件: `{resolved}`，将在目录 ` {dir_path} ` 中等待该文件出现。")
+                    last_missing = resolved
+                if exists_now and last_missing == resolved:
+                    # 文件出现后，清除缺失记录（新文件事件会另行打印）
+                    last_missing = None
+
             new_files = set(current.keys()) - set(known.keys())
             for f in sorted(new_files):
                 print(f"新文件: {f.name}")
-                if target_template:
-                    pos = _print_new_content(f, 0)
-                    positions[f] = pos
+                # 首次发现新文件，打印全部内容
+                pos = _print_new_content(f, 0)
+                positions[f] = pos
 
             removed = set(known.keys()) - set(current.keys())
             for f in sorted(removed):
@@ -140,6 +160,7 @@ def monitor(dir_path: Path, target_template: Optional[str] = None, interval: flo
                 prev_mtime, prev_size = known[f]
                 curr_mtime, curr_size = current[f]
                 if curr_mtime != prev_mtime or curr_size != prev_size:
+                    # 对于已知文件：如果使用模板/按文件监听，则打印新增内容；否则只提示已修改
                     if target_template:
                         prev_pos = positions.get(f, 0)
                         new_pos = _print_new_content(f, prev_pos)
