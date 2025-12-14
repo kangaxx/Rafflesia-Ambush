@@ -1,10 +1,9 @@
 import time
 import akshare as ak
 
-print("获取商品期货行情, 3秒钟一次")
-subscribe = ak.futures_foreign_subscribe()
-print(subscribe)
+print("开始接收实时行情, 每 3 秒刷新一次")
+subscribe_list = ak.futures_foreign_commodity_subscribe_exchange_symbol()  # 其中 subscribe_list 为列表
 while True:
     time.sleep(3)
-    df = ak.futures_foreign_realtime(subscribe)
-    print(df)
+    futures_foreign_commodity_realtime_df = ak.futures_foreign_commodity_realtime(symbol=subscribe_list)
+    print(futures_foreign_commodity_realtime_df)
