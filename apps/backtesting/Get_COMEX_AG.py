@@ -64,11 +64,34 @@ def main():
     default_end_date = today.strftime('%Y%m%d')
     
     parser = argparse.ArgumentParser(
-        description="使用akshare接口获取COMEX白银期货数据"
+        description="使用akshare接口获取COMEX白银期货数据\n"
+        "功能介绍：\n"
+        "  - 本程序通过akshare财经数据接口获取COMEX白银期货的历史交易数据\n"
+        "  - 支持多种时间周期：小时级(1hour)、日线(daily)、周线(weekly)、月线(monthly)\n"
+        "  - 自动验证输入参数有效性，提供详细错误提示\n"
+        "  - 展示数据总行数、预览数据前几行以及完整数据\n"
+        "  - 支持自定义时间范围，默认获取前一天到今天的数据\n"
+        "\n"
+        "使用范例：\n"
+        "  1. 无需指定任何参数，使用默认设置获取白银小时级数据：\n"
+        "     python Get_COMEX_AG.py\n"
+        "  2. 获取指定时间范围的白银日线数据：\n"
+        "     python Get_COMEX_AG.py SI 20230101 20230131 -p daily\n"
+        "  3. 获取白银周线数据（使用默认时间范围）：\n"
+        "     python Get_COMEX_AG.py -p weekly\n"
+        "  4. 使用自定义产品代码获取数据：\n"
+        f"     python Get_COMEX_AG.py GC {default_start_date} {default_end_date}\n"
+        "\n"
+        "注意事项：\n"
+        "  - 产品代码需要符合akshare接口要求，如'SI'代表白银\n"
+        "  - 日期格式必须为'YYYYMMDD'，例如'20230101'\n"
+        "  - akshare接口可能会有更新，请确保使用最新版本的akshare库"
     )
     parser.add_argument(
         "symbol",
-        help="期货产品代码，例如'SI'代表白银"
+        nargs='?',
+        default="SI",
+        help="期货产品代码，例如'SI'代表白银，默认为'SI'"
     )
     parser.add_argument(
         "start_date",
