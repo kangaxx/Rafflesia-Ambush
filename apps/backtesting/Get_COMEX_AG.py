@@ -41,7 +41,7 @@ def get_comex_silver_data(symbol: str, start_date: str, end_date: str, period: s
             
             # 尝试使用futures_global_hist_em接口获取数据
             # 注意：根据测试，此接口只接受symbol参数，且返回的是日频率数据
-            df = ak.futures_global_hist_em(symbol=symbol)
+            df = ak.futures_global_hist(symbol=symbol, period=period)
             
             # 检查数据是否为None或为空
             if df is None:
