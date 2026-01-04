@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Any
 
 BIN_ENV = "XTRADER_BIN"
-DEFAULT_BIN = Path("/root/X-Trader/bin/.demo")
+DEFAULT_BIN = Path("/root/X-Trader/bin/demo")
 SCRIPT_DIR = Path(__file__).resolve().parent
 BATCH_FILE = SCRIPT_DIR / "batch.json"
 CODE_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
