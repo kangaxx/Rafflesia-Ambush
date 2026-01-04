@@ -1,0 +1,10 @@
+{
+  "codes": [
+    "ag2604",
+    "rb2605"
+  ],
+  "meta": {
+    "created_by": "data_collector",
+    "description": "期货产品编码列表，用于逐个启动 /root/X-Trader/bin/.demo -c<code>"
+  }
+}
