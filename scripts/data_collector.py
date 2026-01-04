@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -50,9 +51,32 @@ def get_bin_path() -> Path:
     return DEFAULT_BIN
 
 
-def run_for_code(bin_path: Path, code: str) -> subprocess.CompletedProcess:
-    cmd = [str(bin_path), f"-c{code}"]
+def process_running(bin_path: Path, code: str) -> bool:
+    # 匹配完整命令行包含二进制路径和 -c{code}
+    pattern = f"{str(bin_path)}.*-c{code}"
+    try:
+        res = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
+        return res.returncode == 0
+    except FileNotFoundError:
+        # pgrep 不可用，回退到 ps 检查
+        res = subprocess.run(["ps", "aux"], capture_output=True, text=True)
+        for line in res.stdout.splitlines():
+            if str(bin_path) in line and f"-c{code}" in line and "grep" not in line:
+                return True
+        return False
+
+
+def start_in_screen(bin_path: Path, code: str) -> subprocess.CompletedProcess:
+    session_name = f"xtrader_{code}"
+    # screen -dmS <name> <cmd> <args...>
+    cmd = ["screen", "-dmS", session_name, str(bin_path), f"-c{code}"]
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def start_background(bin_path: Path, code: str) -> subprocess.Popen:
+    # 作为回退，在后台启动进程（不阻塞当前脚本）
+    cmd = [str(bin_path), f"-c{code}"]
+    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
@@ -69,8 +93,9 @@ def main():
     bin_path = get_bin_path()
     if not bin_path.exists() or not os.access(bin_path, os.X_OK):
         print(f"Executable not found or not executable: `{bin_path}`", file=sys.stderr)
-        # do not exit — allow user to see which codes would have been run
+        # 继续以便输出将要运行的内容
 
+    screen_available = shutil.which("screen") is not None
     if not BIN_DIR.exists():
         print(f"Warning: working directory `{BIN_DIR}` does not exist; will not change cwd before execution", file=sys.stderr)
 
@@ -81,35 +106,45 @@ def main():
         if not sanitize(code):
             print(f"Skipping invalid code: {code}")
             continue
+
+        if process_running(bin_path, code):
+            print(f"Skipping {code}: same command already running")
+            continue
+
         if not bin_path.exists() or not os.access(bin_path, os.X_OK):
             print(f"Would run: `{bin_path}` -c{code}  (executable missing)", file=sys.stderr)
             continue
 
-        print(f"Running for code: {code}")
-        # 临时切换当前工作目录到 /root/X-Trader/bin（如果存在），执行后恢复
+        print(f"Starting for code: {code}")
         old_cwd = Path.cwd()
         try:
             if BIN_DIR.exists():
                 os.chdir(str(BIN_DIR))
-            try:
-                result = run_for_code(bin_path, code)
-            except Exception as e:
-                print(f"Execution failed for {code}: {e}", file=sys.stderr)
-                continue
+            if screen_available:
+                try:
+                    result = start_in_screen(bin_path, code)
+                    if result.returncode == 0:
+                        print(f"Started in screen session: xtrader_{code}")
+                    else:
+                        print(f"screen start failed for {code}, returncode={result.returncode}", file=sys.stderr)
+                        if result.stdout:
+                            print(result.stdout.strip(), file=sys.stderr)
+                        if result.stderr:
+                            print(result.stderr.strip(), file=sys.stderr)
+                except Exception as e:
+                    print(f"Failed to start screen for {code}: {e}", file=sys.stderr)
+            else:
+                # 回退到简单的后台启动
+                try:
+                    proc = start_background(bin_path, code)
+                    print(f"Started in background (fallback), pid={proc.pid}")
+                except Exception as e:
+                    print(f"Failed to start background process for {code}: {e}", file=sys.stderr)
         finally:
             try:
                 os.chdir(str(old_cwd))
             except Exception:
-                # 忽略恢复失败
                 pass
-
-        print(f"Return code: {result.returncode}")
-        if result.stdout:
-            print("Stdout:")
-            print(result.stdout.strip())
-        if result.stderr:
-            print("Stderr:")
-            print(result.stderr.strip())
 
 
 if __name__ == "__main__":
